@@ -5,6 +5,7 @@ using namespace boost::asio::ip;
 
 enum class Enum_ServiceType
 {
+	None,
 	Server,
 	Client,
 };
@@ -89,8 +90,11 @@ private:
 class ServerService : public Service
 {
 public:
-	ServerService(const uint16& port, const int32& acceptorcount, std::function<std::shared_ptr<Session>()> sessionFactory, std::shared_ptr<boost::asio::io_service> service = nullptr)
-		: Service(Enum_ServiceType::Server, sessionFactory, service), _openPort(port), _acceptorCount(acceptorcount)
+	ServerService(const int32& port, const int32& acceptorcount, std::function<std::shared_ptr<Session>()> sessionFactory, std::shared_ptr<boost::asio::io_service> service = nullptr)
+		: Service((_openPort > 65535 || _openPort < 0) ? Enum_ServiceType::None : Enum_ServiceType::Server
+		, sessionFactory, service)
+		, _openPort(port)
+		, _acceptorCount(acceptorcount)
 	{}
 
 	// Service을(를) 통해 상속됨

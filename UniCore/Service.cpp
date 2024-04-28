@@ -178,6 +178,9 @@ void ServerService::_OnAccept(std::shared_ptr<Session> csession, std::shared_ptr
 
 void ClientService::Start()
 {
+	if (_serviceType == Enum_ServiceType::None)
+		return;
+
 	DEBUG_CODE(std::cout << "Start Client Service..." << std::endl);
 	for (int i = 0; i < _maxSessionCount; i++) 
 	{
@@ -198,6 +201,9 @@ void ClientService::SessionStart(std::shared_ptr<Session> session)
 
 void ClientService::SessionStart()
 {
+	if (_serviceType == Enum_ServiceType::None)
+		return;
+
 	if (_sfactory == nullptr)
 		return;
 
@@ -207,6 +213,9 @@ void ClientService::SessionStart()
 
 void ServerService::Start()
 {
+	if (_serviceType == Enum_ServiceType::None)
+		return;
+
 	//연결할 클라이언트를 받을 수 있는 상태로 셋팅
 	_StartAccept(_acceptorCount);
 }
