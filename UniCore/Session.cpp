@@ -5,6 +5,7 @@
 #include "boost/bind.hpp"
 
 Session::Session()
+	: _connected(false), _sid(0)
 {
 	_serializeQueue = J_MakeShared<JobQueue>();
 #if defined(__SQL_ODBC)
@@ -38,6 +39,9 @@ void Session::Send(const std::shared_ptr<SendData>& sdata)
 
 void Session::Send(const std::vector<std::shared_ptr<SendData>>& sdatas)
 {
+	if (!_socket->is_open())
+		return;
+
 	auto size = sdatas.size();
 	_sendQueue.enqueue_all(sdatas);
 
@@ -45,6 +49,17 @@ void Session::Send(const std::vector<std::shared_ptr<SendData>>& sdatas)
 	//prev가 0이다? => send완료 후 sub결과가 0이었다 => 등록이 해제되었다 => 재등록해야한다.
 	if (prev == 0)
 		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+}
+
+void Session::Connected()
+{
+	_connected.store(true);
+	_AttachSelfSession();
+
+	OnConnected();
+
+	//수신 가능한 상태로 변경
+	_RegisterRecv();
 }
 
 void Session::Disconnect(std::string cause)
@@ -81,7 +96,7 @@ void Session::SessionSideDBJob(const std::vector<std::shared_ptr<SQL_Query_Sende
 
 void Session::_RegisterSend()
 {
-	if (_socket->is_open() == false)
+	if (!_socket->is_open())
 		return;
 
 	std::vector<std::shared_ptr<SendData>> datas;
@@ -183,10 +198,6 @@ void Session::_HandleRecv(const boost::system::error_code& error, size_t bytes_t
 	//다 처리했으니 다시 수신하기.
 
 	_RegisterRecv();
-	//GlobalHandler.threadManager->EnqueueJob([this, bytes_transferred]()
-	//    {
-	//        
-	//    });
 }
 
 void Session::_HandleError(const boost::system::error_code& error)
@@ -246,7 +257,7 @@ void Session::_AttachSelfSession()
 {
 	auto service = GetService();
 	if (service)
-		service->AddSession(shared_from_this());
+		service->AttachSession(shared_from_this());
 }
 
 void Session::_DetachSelfSession()
@@ -257,9 +268,9 @@ void Session::_DetachSelfSession()
 }
 
 
-
 void ActiveSession::Start()
 {
+	//여기서 ActiveSession은 등록하지 않아도, 여기서 bind 속에서 ref가 전이된다.
 	_socket->async_connect(
 	_ep,
 	boost::bind(&ActiveSession::_HandleConnect, std::static_pointer_cast<ActiveSession>(shared_from_this()), boost::asio::placeholders::error));
@@ -267,33 +278,21 @@ void ActiveSession::Start()
 
 void ActiveSession::_HandleConnect(const boost::system::error_code& error)
 {
-	//뭐? 연결실패? 다시해!
 	if (error)
 	{
-		GlobalHandler.threadManager->EnqueueJob(J_MakeShared<ThreadJob>([this]() {
-				Start();
-			}, shared_from_this()), _reconnection_interval);
+		//GlobalHandler.threadManager->EnqueueJob(J_MakeShared<ThreadJob>([this]() {
+		Start();
+			//}, shared_from_this()), _reconnection_interval);
 
 		return;
 	}
 
-	_connected.store(true);
-	_AttachSelfSession();
-	
-	OnConnected();
-
-	//수신 가능한 상태로 변경
-	_RegisterRecv();
+	Connected();
 }
 
 void PassiveSession::Start()
 {
-	_connected.store(true);
-	_AttachSelfSession();
 	_ip = _socket->remote_endpoint().address().to_string();
 
-	OnConnected();
-
-	//수신 가능한 상태로 변경
-	_RegisterRecv();
+	Connected();
 }

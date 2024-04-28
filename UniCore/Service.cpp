@@ -4,6 +4,28 @@
 
 #include "boost/bind.hpp"
 
+
+void ServiceBase::_anchor()
+{
+	GetCore()->run();
+	GlobalHandler.threadManager->EnqueueJob(
+		[this]() { _anchor(); },
+		shared_from_this()
+	);
+}
+
+void ServiceBase::AnchoringService(int32 serviceCount)
+{
+	for (int32 i = 0; i < serviceCount; i++)
+	{
+		GlobalHandler.threadManager->EnqueueJob(
+			[this]() { _anchor();  },
+			shared_from_this()
+		);
+	}
+}
+
+
 Service::Service(Enum_ServiceType serviceType, std::function<std::shared_ptr<Session>()> sessionFactory, std::shared_ptr<boost::asio::io_service> service)
 	: _serviceType(serviceType)
 {
@@ -38,14 +60,7 @@ std::shared_ptr<Session> Service::GetSession(uint64 sid)
 	return itr->second;
 }
 
-void Service::GetAllSessions(OUT std::vector<std::shared_ptr<Session>>& result)
-{
-	READ_LOCK;
-	for (auto& itr : _connected_sessions)
-		result.push_back(itr.second);
-}
-
-void Service::AddSession(std::shared_ptr<Session> session)
+void Service::AttachSession(std::shared_ptr<Session> session)
 {
 	uint64 sessionID = _sessionCount.fetch_add(1);
 	session->set_sid(sessionID);
@@ -81,67 +96,6 @@ void Service::RemoveSession(const int64& sid)
 	itr->second->Disconnect();
 	_connected_sessions.erase(itr);
 }
-
-void Service::_anchor()
-{
-	GetCore()->run();
-	GlobalHandler.threadManager->EnqueueJob(
-		[this]() { _anchor(); },
-		shared_from_this()
-	);
-}
-
-void Service::AnchoringService(int32 serviceCount)
-{
-	for (int32 i = 0; i < serviceCount; i++)
-	{
-		GlobalHandler.threadManager->EnqueueJob(
-			[this]() { _anchor();  },
-			shared_from_this()
-		);
-	}
-}
-
-void Service::BroadCast(const std::shared_ptr<SendData>& data)
-{
-	//보내는 동안은 session 리스트가 변조되지 않도록 lock
-	READ_LOCK;
-	for (auto& item : _connected_sessions)
-		item.second->Send(data);
-}
-
-void Service::BroadCast_Except(const std::shared_ptr<SendData>& data, const uint64& except_id)
-{
-	//보내는 동안은 session 리스트가 변조되지 않도록 lock
-	READ_LOCK;
-	for (auto& item : _connected_sessions)
-	{
-		if (except_id == item.second->sid())
-			continue;
-		item.second->Send(data);
-	}
-}
-
-void Service::BroadCast(const std::vector<std::shared_ptr<SendData>>& datas)
-{
-	//보내는 동안은 session 리스트가 변조되지 않도록 lock
-	READ_LOCK;
-	for (auto& item : _connected_sessions)
-		item.second->Send(datas);
-}
-
-void Service::BroadCast_Except(const std::vector<std::shared_ptr<SendData>>& datas, const uint64& except_id)
-{
-	//보내는 동안은 session 리스트가 변조되지 않도록 lock
-	READ_LOCK;
-	for (auto& item : _connected_sessions)
-	{
-		if (except_id == item.second->sid())
-			continue;
-		item.second->Send(datas);
-	}
-}
-
 
 void ServerService::_StartAccept(int32 acceptorCount, int32 listenCount)
 {

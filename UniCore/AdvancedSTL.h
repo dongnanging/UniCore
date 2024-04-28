@@ -47,7 +47,7 @@ namespace stdex
 
 	//unordered_map
 	template<typename _Kty, typename _Vty, typename _Hasher = std::hash<_Kty>, typename _Equal = std::equal_to<_Kty> ,typename _Less = std::less<_Kty>, 
-		typename _CustAlloc = CustomAllocator<std::pair<_Kty, _Vty>>>
+		typename _CustAlloc = CustomAllocator<std::pair<const _Kty, _Vty>>>
 	using unordered_map = std::unordered_map<_Kty, _Vty, _Hasher, _Equal, _CustAlloc>;
 
 

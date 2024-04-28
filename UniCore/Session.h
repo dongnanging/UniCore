@@ -14,7 +14,7 @@ class Session : public std::enable_shared_from_this<Session>
 
 	using SOCKET = std::shared_ptr<tcp::socket>;
 
-public:
+protected:
 	Session();
 	virtual ~Session();
 
@@ -25,13 +25,12 @@ public:
 	virtual void Start() = 0;
 	void Send(const std::shared_ptr<SendData>& sdata);
 	void Send(const std::vector<std::shared_ptr<SendData>>& sdatas);
+	void Connected();
 	void Disconnect(std::string cause = "Disconnect Called");
 
 	//tcp -> udp로 변경될 가능성이 있으므로 socket은 연역하는것으로..
 	auto GetSocket() { return _socket; }
 	auto GetService() { return _ownedService.lock(); }
-
-	bool IsConnected() { return _connected.load(); }
 
 #if defined(__SQL_ODBC)
 	void SessionSideDBJob(const std::shared_ptr<SQL_Query_Sender>& sender, const std::shared_ptr<ThreadJob>& callback = nullptr);
@@ -74,7 +73,7 @@ protected:
 
 protected:
 	SOCKET _socket;
-	std::atomic<bool> _connected = false;
+	std::atomic<bool> _connected;
 
 	std::weak_ptr<Service> _ownedService;
 
