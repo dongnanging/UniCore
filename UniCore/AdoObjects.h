@@ -273,8 +273,8 @@ public:
 private:
     _RecordsetPtr _record;
     std::shared_ptr<ado_parameter> _ret;
-    ads::vector<std::shared_ptr<ado_parameter>> _inputs;
-    ads::vector<std::shared_ptr<ado_parameter>> _outputs;
+    stdex::vector<std::shared_ptr<ado_parameter>> _inputs;
+    stdex::vector<std::shared_ptr<ado_parameter>> _outputs;
 };
 
 class ado_conn_object : public std::enable_shared_from_this<ado_conn_object>

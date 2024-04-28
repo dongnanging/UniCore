@@ -1,10 +1,18 @@
 #pragma once
 
-namespace ads
+namespace stdex
 {
 	//alloc
 	template<typename _Ty>
 	using CustomAllocator = now_allocator<_Ty>;
+
+	//string
+	template<typename _Ty = char, typename _Alloc = CustomAllocator<_Ty>>
+	using string = std::basic_string<_Ty, std::char_traits<_Ty>, _Alloc>;
+
+	//wstring 
+	template<typename _Ty = wchar_t, typename _Alloc = CustomAllocator<_Ty>>
+	using wstring = std::basic_string<_Ty, std::char_traits<_Ty>, _Alloc>;
 
 
 	//vector

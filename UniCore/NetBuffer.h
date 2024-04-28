@@ -35,7 +35,7 @@ public:
 protected:
 	int32 _readPos = 0;
 	int32 _writePos = 0;
-	ads::vector<BYTE> _buffer;
+	stdex::vector<BYTE> _buffer;
 };
 
 

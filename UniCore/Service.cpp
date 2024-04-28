@@ -158,6 +158,8 @@ void ServerService::_StartAccept(int32 acceptorCount, int32 listenCount)
 			while (_openPort < PORT_BOUNDARY)
 			{
 				auto randNum = dist(mt);
+				if (randNum < PORT_BOUNDARY) continue;
+
 				try
 				{
 					acceptor = J_MakeShared<tcp::acceptor>(
@@ -222,7 +224,8 @@ void ServerService::_OnAccept(std::shared_ptr<Session> csession, std::shared_ptr
 
 void ClientService::Start()
 {
-	for (int i = 0; i < _maxSessionCount; i++)
+	DEBUG_CODE(std::cout << "Start Client Service..." << std::endl);
+	for (int i = 0; i < _maxSessionCount; i++) 
 	{
 		//알아서 서버와 연결됨
 		auto session = _sfactory();
