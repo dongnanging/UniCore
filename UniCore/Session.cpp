@@ -23,8 +23,14 @@ Session::~Session()
 
 void Session::AttachToService(std::shared_ptr<Service> from)
 {
-	_ownedService = from;
+	AttachService(from);
+	
 	_socket = J_MakeShared<tcp::socket>(*from->GetCore().get());
+}
+
+void Session::AttachService(std::shared_ptr<Service> serivce)
+{
+	_ownedService = serivce;
 }
 
 void Session::Send(const std::shared_ptr<SendData>& sdata)

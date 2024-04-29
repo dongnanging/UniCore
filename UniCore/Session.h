@@ -20,6 +20,7 @@ protected:
 
 public:
 	void AttachToService(std::shared_ptr<Service> from);
+	void AttachService(std::shared_ptr<Service> serivce);
 
 public:
 	virtual void Start() = 0;

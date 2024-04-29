@@ -21,7 +21,7 @@
 //TODO 기본 mutex나 csec이라고 하더라도 래핑클래스로 깔끔하게 관리하는게 좋아보인다.
 #if defined(__LOCK_MUTEX)	//기본 mutex
 #include <mutex>
-#define USE_MULT_LOCK(count) std::recursive_mutex _locks[count]
+#define USE_MULT_LOCK(count) mutable std::recursive_mutex _locks[count]
 #define READ_LOCK_IDX(idx) std::lock_guard<std::recursive_mutex> read_lock_guard_##idx(_locks[idx])
 #define WRITE_LOCK_IDX(idx) std::lock_guard<std::recursive_mutex> write_lock_guard_##idx(_locks[idx])
 #define GET_LOCK_IDX(idx) _locks[idx]
