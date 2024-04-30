@@ -33,9 +33,17 @@ protected:
 
 class Service :public ServiceBase
 {
+private:
+	USE_LOCK;
+
+public:
+	using _SharedSessionPtr = std::shared_ptr<Session>;
+	using intrude_itr_func = std::function<void(const _SharedSessionPtr&)>;
+
+#define INTRUDE(...) [__VA_ARGS__](const _SharedSessionPtr& session)
+
 protected:
 	Service(Enum_ServiceType serviceType, std::function<std::shared_ptr<Session>()> sessionFactory, std::shared_ptr<boost::asio::io_service> service = nullptr);
-
 	
 public:
 	auto GetServiceType() { return _serviceType; }
@@ -58,6 +66,18 @@ public:
 	virtual void RemoveSession(const int64& sid);
 	virtual void Start() = 0;
 
+public:
+	template<typename _SessionType>
+	void Intrude(intrude_itr_func func)
+	{
+		WRITE_LOCK;
+		for (auto& itr : _connected_sessions)
+		{
+			if(itr.second)
+				func(itr.second);
+		}
+	}
+
 protected:
 	std::function<std::shared_ptr<Session>()> _sfactory;
 
@@ -66,8 +86,7 @@ protected:
 	std::unordered_map <uint64, std::shared_ptr<Session>> _connected_sessions;
 	Enum_ServiceType _serviceType;
 
-private:
-	USE_LOCK;
+
 };
 
 class ClientService : public Service

@@ -78,13 +78,16 @@ void Session::Disconnect(std::string cause)
 		//change to global stream?
 		DEBUG_CODE(std::cout << "Session: " << _sid << " is closed.\ncause::" << cause << std::endl);
 
+		//여기서 ref를 해제해도 이 lambda가 끝나기 전까진 capture가 유지된다.
+		//이 블록에 들어온 순간 생존권이 이미 확보된 상태이다.
+		_DetachSelfSession();
+
 		OnDisconnected();
 
 		boost::system::error_code error;
 		_socket->shutdown(boost::asio::socket_base::shutdown_both, error);
 		_socket->close();
-
-		_DetachSelfSession();
+		
 		});
 }
 
@@ -299,6 +302,7 @@ void ActiveSession::_HandleConnect(const boost::system::error_code& error)
 void PassiveSession::Start()
 {
 	_ip = _socket->remote_endpoint().address().to_string();
+	_port = _socket->remote_endpoint().port();
 
 	Connected();
 }

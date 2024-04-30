@@ -41,7 +41,7 @@ namespace stdex
 
 
 	//map
-	template<typename _Kty, typename _Vty, typename _Less = std::less<_Kty>, typename _CustAlloc = CustomAllocator<std::pair<_Kty, _Vty>>>
+	template<typename _Kty, typename _Vty, typename _Less = std::less<_Kty>, typename _CustAlloc = CustomAllocator<std::pair<const _Kty, _Vty>>>
 	using map = std::map<_Kty, _Vty, _Less, _CustAlloc>;
 
 
