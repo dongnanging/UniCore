@@ -59,6 +59,10 @@ namespace stdex
 								>::type> : std::true_type {};
 
 
+	template<typename _Ty>
+	static constexpr bool is_stl_container_v = is_stl_container<_Ty>::value;
+
+
 	// =================================
 	// types
 	// =================================
@@ -233,6 +237,162 @@ namespace stdex
 		}
 	};
 
+
+	template<typename _Type>
+	struct sprintf_traits
+	{
+		using pure_t = typename pure_type_t<_Type>;
+	};
+
+
+	// =================================
+	// view
+	// =================================
+
+	template<	typename _Ty,
+				typename = std::enable_if_t<is_stl_container_v<_Ty>>>
+	struct stl_view
+	{
+	protected:
+		_Ty* _container;
+
+	public:
+		stl_view(_Ty& container)
+			: _container(&container)
+		{}
+
+		auto begin() { return _container->begin(); }
+		auto end() { return _container->end(); }
+		auto size() { return _container->size(); }
+		auto empty() { return _container->end(); }
+	};
+
+	template<	typename _Ty,
+				typename = std::enable_if_t<is_stl_container_v<_Ty>>>
+	struct reverse_view
+	{
+	protected:
+		_Ty* _container;
+
+	public:
+		reverse_view(_Ty& container)
+			: _container(&container)
+		{}
+
+		auto begin() { return _container->rbegin(); }
+		auto end() { return _container->rend(); }
+		auto size() { return _container->size(); }
+		auto empty() { return _container->end(); }
+	};
+
+	template<typename _Ty, typename _View = stl_view<_Ty>>
+	struct safe_view
+	{
+	public:
+		using view_type = typename _View;
+		using insert_func = std::function<void(view_type&)>;
+
+	protected:
+		std::function<bool(const insert_func&)> _valid_view;
+		_View _view;
+
+	public:
+		template<typename _Validator>
+		safe_view(_Ty& container, std::shared_ptr<_Validator> valid)
+			: _view(container)
+		{
+			_valid_view = [this, weak_ = std::move(std::weak_ptr<_Validator>(valid))](const insert_func& insert)
+				{
+					auto alive = weak_.lock();
+
+					if (!alive)
+						return false;
+
+					insert(_view);
+					return true;
+				};
+		}
+
+		virtual bool insertion(const insert_func& insert)
+		{
+			return _valid_view(insert);
+		}
+	};
+
+	template<typename _Lockable>
+	using lockable = typename substitution_helper<decltype(std::declval<_Lockable>().rlock()), decltype(std::declval<_Lockable>().wlock())>::type;
+
+	template<typename _BaseLock>
+	static constexpr bool is_base_lock_v = std::is_same_v<_BaseLock, std::mutex> || std::is_same_v<_BaseLock, std::recursive_mutex>;
+
+	template<typename _LockType>
+	struct lock_traits
+	{
+		using lock_type = typename pure_type_t<_LockType>;
+
+		template<	typename _Ty,
+					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
+					typename = std::enable_if_t<is_base_lock_v<lock_type>>
+		>
+		static inline decltype(auto) rlock(_Ty& lock)
+		{
+			return std::lock_guard<_Ty>(lock);
+		}
+
+		template<	typename _Ty,
+					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
+					typename = std::enable_if_t<is_base_lock_v<lock_type>>
+		>
+		static inline decltype(auto) wlock(_Ty& lock)
+		{
+			return std::lock_guard<_Ty>(lock);
+		}
+
+
+		template<	typename _Ty,
+					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
+					typename = std::enable_if_t<!is_base_lock_v<lock_type>>,
+					typename = lockable<lock_type>
+		>
+		static inline decltype(auto) rlock(_Ty& lock)
+		{
+			return lock.rlock();
+		}
+
+		template<	typename _Ty,
+					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
+					typename = std::enable_if_t<!is_base_lock_v<lock_type>>,
+					typename = lockable<lock_type>
+		>
+		static inline decltype(auto) wlock(_Ty& lock)
+		{
+			return lock.wlock();
+		}
+	};
+
+
+	template<typename _Ty, typename _LockType = std::mutex, typename _View = stl_view<_Ty>>
+	struct lock_view : public safe_view<_Ty, _View>
+	{
+	protected:
+		_LockType& _lock;
+
+	public:
+		template<typename _Validator>
+		lock_view(_Ty& container, std::shared_ptr<_Validator> valid, _LockType& lock)
+			: safe_view<_Ty, _View>(container, valid), _lock(lock)
+		{}
+
+		virtual bool insertion(const typename safe_view<_Ty, _View>::insert_func& insert)
+		{
+			typename safe_view<_Ty, _View>::insert_func lock_insert = [insert, this](safe_view<_Ty, _View>::view_type& view) {
+					lock_traits<decltype(_lock)>::rlock(_lock);
+					insert(view);
+				};
+
+			return safe_view<_Ty, _View>::_valid_view(lock_insert);
+		}
+	};
 
 	// =================================
 	// func

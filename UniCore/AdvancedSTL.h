@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 namespace stdex
 {
 	//alloc
@@ -54,5 +56,5 @@ namespace stdex
 	//unordered_set
 	template<typename _Kty, typename _Hasher = std::hash<_Kty>, typename _Equal = std::equal_to<_Kty>, typename _Less = std::less<_Kty>,
 		typename _CustAlloc = CustomAllocator<_Kty>>
-	using unordered_set = std::unordered_map<_Kty, _Hasher, _Equal, _CustAlloc>;
+	using unordered_set = std::unordered_set<_Kty, _Hasher, _Equal, _CustAlloc>;
 }
