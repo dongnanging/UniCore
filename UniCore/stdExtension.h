@@ -2,11 +2,14 @@
 
 namespace stdex
 {
-	template<typename... Substitutions>
+	template<typename... _Substitutions>
 	struct substitution_helper 
 	{
 		using type = void;
 	};
+
+	template<typename... _Substitutions>
+	using substitution_helper_t = substitution_helper<_Substitutions...>;
 	
 	// =================================
 	// bool
@@ -243,154 +246,156 @@ namespace stdex
 	{
 		using pure_t = typename pure_type_t<_Type>;
 	};
-
-
+	
 	// =================================
 	// view
 	// =================================
 
-	template<	typename _Ty,
-				typename = std::enable_if_t<is_stl_container_v<_Ty>>>
-	struct stl_view
+	template<	typename _Ty
+				/*typename = substitution_helper_t<
+					decltype(std::declval<_Ty>().begin()),
+					decltype(std::declval<_Ty>().end()),
+					typename _Ty::iterator,
+					typename _Ty::const_iterator
+		>*/>
+	struct view_base
 	{
 	protected:
 		_Ty* _container;
+		using iterator = _Ty::iterator;
 
 	public:
-		stl_view(_Ty& container)
+		view_base(_Ty& container)
 			: _container(&container)
 		{}
 
+	public:
 		auto begin() { return _container->begin(); }
 		auto end() { return _container->end(); }
 		auto size() { return _container->size(); }
 		auto empty() { return _container->end(); }
 	};
-
-	template<	typename _Ty,
-				typename = std::enable_if_t<is_stl_container_v<_Ty>>>
-	struct reverse_view
+	                                             
+	template<typename _Ty>
+	struct reverse_view : public view_base<_Ty>
 	{
-	protected:
-		_Ty* _container;
-
 	public:
 		reverse_view(_Ty& container)
-			: _container(&container)
+			: view_base<_Ty>::_container(&container)
 		{}
 
-		auto begin() { return _container->rbegin(); }
-		auto end() { return _container->rend(); }
-		auto size() { return _container->size(); }
-		auto empty() { return _container->end(); }
+		auto begin() { return view_base<_Ty>::_container->rbegin(); }
+		auto end() { return view_base<_Ty>::_container->rend(); }
 	};
 
-	template<typename _Ty, typename _View = stl_view<_Ty>>
-	struct safe_view
+	
+	template<template<typename> class _Shared>
+	struct shared_ptr_traits
+	{
+		template<typename _Ty, typename = std::enable_if_t<std::is_same_v<_Shared, std::shared_ptr>>>
+		static inline std::weak_ptr<_Ty> get_weak(const _Shared<_Ty>& shared_ptr)
+		{
+			return std::weak_ptr<_Ty>(shared_ptr);
+		}
+
+		template<typename _Ty, typename = substitution_helper_t<decltype(std::declva<_Shared<_Ty>>().make_weak())>>
+		static inline decltype(auto) get_weak(const _Shared<_Ty>& shared_ptr)
+		{
+			return shared_ptr.make_weak();
+		}
+
+		template<typename _Ty, typename _Weak, typename = substitution_helper_t<decltype(std::declval<_Weak>().lock())>>
+		static inline decltype(auto) lock(_Weak&& ptr)
+		{
+			return ptr.lock();
+		}
+	};
+
+	template<typename _Ty, typename _Shared>
+	struct shared_view : public view_base<_Ty>
 	{
 	public:
-		using view_type = typename _View;
-		using insert_func = std::function<void(view_type&)>;
+		using intrude_func = std::function<void(const view_base<_Ty>&)>;
 
-	protected:
-		std::function<bool(const insert_func&)> _valid_view;
-		_View _view;
+		std::function<void()> _intrude;
+		std::function<void()> _callable;
 
 	public:
-		template<typename _Validator>
-		safe_view(_Ty& container, std::shared_ptr<_Validator> valid)
-			: _view(container)
+		template<typename _Ty>
+		shared_view(_Ty& container, const _Shared& origin)
+			: view_base<_Ty>(container)
 		{
-			_valid_view = [this, weak_ = std::move(std::weak_ptr<_Validator>(valid))](const insert_func& insert)
-				{
-					auto alive = weak_.lock();
+			auto weak = shared_ptr_traits<_Shared>::get_weak(std::forward<_Shared>(origin));
+			_intrude = [this, weak_validator = std::move(weak)]() {
+				auto alive = shared_ptr_traits<decltype(weak_validator)>::lock(weak_validator);
 
-					if (!alive)
-						return false;
+				if (!alive)
+					return;
 
-					insert(_view);
-					return true;
+				_callable();
 				};
 		}
 
-		virtual bool insertion(const insert_func& insert)
+		template<typename _Callable, typename = substitution_helper_t<decltype(std::declval<_Callable>().operator ())>>
+		void view_when_valid(_Callable&& intrude)
 		{
-			return _valid_view(insert);
+			_callable = [_call = std::forward<_Callable>(intrude)]() {
+				_call();
+				};
+
+			_intrude();
 		}
+
+
+	protected:
+		auto begin() = delete;
+		auto end() = delete;
+		auto size() = delete;
+		auto empty() = delete;
 	};
 
-	template<typename _Lockable>
-	using lockable = typename substitution_helper<decltype(std::declval<_Lockable>().rlock()), decltype(std::declval<_Lockable>().wlock())>::type;
-
-	template<typename _BaseLock>
-	static constexpr bool is_base_lock_v = std::is_same_v<_BaseLock, std::mutex> || std::is_same_v<_BaseLock, std::recursive_mutex>;
-
-	template<typename _LockType>
+	template<class _LockRAII>
 	struct lock_traits
 	{
-		using lock_type = typename pure_type_t<_LockType>;
-
-		template<	typename _Ty,
-					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
-					typename = std::enable_if_t<is_base_lock_v<lock_type>>
-		>
-		static inline decltype(auto) rlock(_Ty& lock)
-		{
-			return std::lock_guard<_Ty>(lock);
-		}
-
-		template<	typename _Ty,
-					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
-					typename = std::enable_if_t<is_base_lock_v<lock_type>>
-		>
-		static inline decltype(auto) wlock(_Ty& lock)
-		{
-			return std::lock_guard<_Ty>(lock);
-		}
-
-
-		template<	typename _Ty,
-					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
-					typename = std::enable_if_t<!is_base_lock_v<lock_type>>,
-					typename = lockable<lock_type>
-		>
-		static inline decltype(auto) rlock(_Ty& lock)
-		{
-			return lock.rlock();
-		}
-
-		template<	typename _Ty,
-					typename = std::enable_if_t<std::is_same_v<pure_type_t<_Ty>, lock_type>>,
-					typename = std::enable_if_t<!is_base_lock_v<lock_type>>,
-					typename = lockable<lock_type>
-		>
-		static inline decltype(auto) wlock(_Ty& lock)
-		{
-			return lock.wlock();
-		}
-	};
-
-
-	template<typename _Ty, typename _LockType = std::mutex, typename _View = stl_view<_Ty>>
-	struct lock_view : public safe_view<_Ty, _View>
-	{
-	protected:
-		_LockType& _lock;
+	private:
+		std::function<_LockRAII()> _get_lcok;
 
 	public:
-		template<typename _Validator>
-		lock_view(_Ty& container, std::shared_ptr<_Validator> valid, _LockType& lock)
-			: safe_view<_Ty, _View>(container, valid), _lock(lock)
-		{}
-
-		virtual bool insertion(const typename safe_view<_Ty, _View>::insert_func& insert)
+		template<	typename... _Args,
+					typename = std::enable_if_t<std::is_constructible_v<_LockRAII, _Args...>>>
+		lock_traits(_Args&&... args)
 		{
-			typename safe_view<_Ty, _View>::insert_func lock_insert = [insert, this](safe_view<_Ty, _View>::view_type& view) {
-					lock_traits<decltype(_lock)>::rlock(_lock);
-					insert(view);
-				};
+			if constexpr (sizeof...(_Args) > 1)
+			{
+				_get_lcok = [pack = std::make_tuple(std::forward<_Args>(args)...)]() {
+					return std::apply([](auto&&... pargs) {
+						return _LockRAII(std::forward<_Args>(pargs)...);
+						}, pack);
 
-			return safe_view<_Ty, _View>::_valid_view(lock_insert);
+					};
+			}
+			else if constexpr(sizeof...(_Args) == 1)
+			{
+				_get_lcok = [pack = std::tuple<_Args...>(std::forward<_Args>(args)...)]() {
+					return std::apply([](auto&&... pargs) {
+						return _LockRAII(std::forward<_Args>(pargs)...);
+						}, pack);
+
+					};
+			}
+			else
+			{
+				_get_lcok = []() {
+						return _LockRAII();
+					};
+			}
+			
+		}
+
+		_LockRAII Lock()
+		{
+			// 무조건 우측값으로 줘야됨
+			return _get_lcok();
 		}
 	};
 
