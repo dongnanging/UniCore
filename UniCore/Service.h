@@ -60,6 +60,11 @@ public:
 	virtual void RemoveSession(const int64& sid);
 	virtual void Start() = 0;
 
+	auto lock_view()
+	{
+
+	}
+
 protected:
 	std::function<std::shared_ptr<Session>()> _sfactory;
 
@@ -67,8 +72,6 @@ protected:
 
 	std::unordered_map <uint64, std::shared_ptr<Session>> _connected_sessions;
 	Enum_ServiceType _serviceType;
-
-
 };
 
 class ClientService : public Service
