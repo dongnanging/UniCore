@@ -66,6 +66,11 @@ public:
 		//return _lock_view;
 	}
 
+	const auto& shared_view()
+	{
+		return stdex::shared_view(_connected_sessions, shared_from_this());
+	}
+
 protected:
 	std::function<std::shared_ptr<Session>()> _sfactory;
 
