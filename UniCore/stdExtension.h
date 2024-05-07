@@ -12,7 +12,39 @@ namespace stdex
 	using substitution_helper_t = substitution_helper<_Substitutions...>;
 	
 	// =================================
-	// bool
+	// bool - has
+	// =================================
+	template<typename _Ty, typename _Has>
+	struct has_type {
+	private:
+		// T가 V를 가진다면 이쪽 -> auto = true_type;
+		template<typename _X>
+		static auto test(typename _X::_Has*) -> std::true_type;
+
+		// 아니면 이쪽 전부(...) -> auto = false_type
+		template<typename>
+		static auto test(...) -> std::false_type;
+
+	public:
+		static constexpr bool value = decltype(test<_Ty>(nullptr))::value;
+	};
+
+	template<typename _Ty, typename _Has>
+	static constexpr bool has_type_t = has_type<_Ty, _Has>::value;
+
+
+	template<typename _Ty, typename _Drain = void>
+	struct has_reverse_iterator : std::false_type {};
+
+	template<typename _Ty>
+	struct has_reverse_iterator<_Ty, typename substitution_helper<typename _Ty::reverse_iterator>::type>
+		: std::true_type {};
+	
+	template<typename _Ty>
+	static constexpr bool has_reverse_iterator_v = has_reverse_iterator<_Ty>::value;
+
+	// =================================
+	// bool - is
 	// =================================
 	template<typename _Val>
 	struct _not
@@ -260,17 +292,23 @@ namespace stdex
 	// view
 	// =================================
 
+
 	struct view_base {};
 
-	template<	typename _Ty,
-				typename = substitution_helper_t<
-					decltype(std::declval<_Ty>().begin()),
-					decltype(std::declval<_Ty>().end()),
-					typename _Ty::iterator,
-					typename _Ty::const_iterator,
-					typename _Ty::reverse_iterator
-		>>
-	struct view : public view_base
+	template<typename _Ty>
+	struct forward_view_types : public view_base
+	{
+
+	};
+	template<typename _Ty>
+	struct reverse_view_types : public view_base
+	{
+	public:
+		using reverse_iterator = typename _Ty::reverse_iterator;
+	};
+
+	template<	typename _Ty>
+	struct view : public std::conditional_t<has_reverse_iterator_v<_Ty>, reverse_view_types<_Ty>, forward_view_types<_Ty>>
 	{
 	protected:
 		mutable _Ty* _view_ptr;
@@ -279,10 +317,17 @@ namespace stdex
 		//이거 정의해 둬야 view에 view 넣기 가능
 		using iterator = typename _Ty::iterator;
 		using const_iterator = typename _Ty::const_iterator;
-		using reverse_iterator = typename _Ty::reverse_iterator;
 		using iterator_category = typename _Ty::iterator::iterator_category;
 
+		using iterator_type = iterator;
+
 	public:
+		template<typename = substitution_helper_t<
+					decltype(std::declval<_Ty>().begin()),
+					decltype(std::declval<_Ty>().end()),
+					typename _Ty::iterator,
+					typename _Ty::const_iterator
+			>>
 		view(_Ty& container)
 			: _view_ptr(&container)
 		{}
@@ -293,15 +338,12 @@ namespace stdex
 		virtual std::size_t size() const noexcept { return _view_ptr->size(); }
 		virtual bool empty() const noexcept { return _view_ptr->empty(); }
 	};
+	
+	template<typename _Ty>
+	view(_Ty) -> view<_Ty>;
+
 	                                             
-	template<	typename _Ty, 
-				typename = substitution_helper_t<
-					decltype(std::declval<_Ty>().begin()),
-					decltype(std::declval<_Ty>().end()),
-					typename _Ty::iterator,
-					typename _Ty::const_iterator,
-					typename _Ty::reverse_iterator
-		>>
+	template<	typename _Ty>
 	struct reverse_view : public view_base
 	{
 	protected:
@@ -313,7 +355,16 @@ namespace stdex
 		using reverse_iterator = typename _Ty::reverse_iterator;
 		using iterator_category = typename _Ty::iterator::iterator_category;
 
+		using iterator_type = reverse_iterator;
+
 	public:
+		template<typename = substitution_helper_t<
+					decltype(std::declval<_Ty>().begin()),
+					decltype(std::declval<_Ty>().end()),
+					typename _Ty::iterator,
+					typename _Ty::const_iterator,
+					typename _Ty::reverse_iterator
+			>>
 		reverse_view(_Ty& container)
 			: _view_ptr(&container)
 		{}
@@ -324,6 +375,9 @@ namespace stdex
 		virtual std::size_t size() const noexcept { return _view_ptr->size(); }
 		virtual bool empty() const noexcept { return _view_ptr->empty(); }
 	};
+
+	template<typename _Ty>
+	reverse_view(_Ty) -> reverse_view<_Ty>;
 
 	
 	template<typename _Shared>
@@ -349,30 +403,33 @@ namespace stdex
 	};
 
 	template<typename _Ty, typename _Shared, template<typename> class _ViewType>
-	struct owned_view : public _ViewType<_Ty>
+	struct owned_view : _ViewType<_Ty>
 	{
 	protected:
 		mutable _Shared _shared;
 
+		using _View = _ViewType<_Ty>;
+
 	public:
-		using iterator = typename _ViewType<_Ty>::iterator;
-		using const_iterator = typename _ViewType<_Ty>::const_iterator;
-		using reverse_iterator = typename _ViewType<_Ty>::reverse_iterator;
-		using iterator_category = typename _ViewType<_Ty>::iterator::iterator_category;
+		using iterator = typename _View::iterator;
+		using const_iterator = typename _View::const_iterator;
+		using iterator_category = typename _View::iterator::iterator_category;
+
+		using iterator_type = _View::iterator_type;
 
 	public:
 		owned_view(_Ty& container, _Shared&& shared)
-			: _ViewType<_Ty>(container)
+			: _View(container)
 		{
 			_shared = std::move(shared);
 		}
 
 		bool alive() { return _shared != nullptr; }
 
-		virtual typename _ViewType<_Ty>::iterator begin() const noexcept override { if (!_shared) return _ViewType<_Ty>::iterator(); return _ViewType<_Ty>::begin(); }
-		virtual typename _ViewType<_Ty>::iterator end() const noexcept override { if (!_shared) return _ViewType<_Ty>::iterator(); return _ViewType<_Ty>::end(); }
-		virtual std::size_t size() const noexcept override { if (!_shared) return 0; return _ViewType<_Ty>::size(); }
-		virtual bool empty() const noexcept override { if (!_shared) return true; return _ViewType<_Ty>::empty(); }
+		virtual typename _View::iterator_type begin() const noexcept override { if (!_shared) return _View::iterator_type(); return _View::begin(); }
+		virtual typename _View::iterator_type end() const noexcept override { if (!_shared) return _View::iterator_type(); return _View::end(); }
+		virtual std::size_t size() const noexcept override { if (!_shared) return 0; return _View::size(); }
+		virtual bool empty() const noexcept override { if (!_shared) return true; return _View::empty(); }
 	};
 
 	template<typename _Ty, typename _Shared>
@@ -389,21 +446,21 @@ namespace stdex
 			_weak_ptr = shared_ptr_traits<_Shared>::get_weak(origin);
 		}
 
-		template<template<typename>  class _ViewType = stdex::view>
-		auto view() const noexcept
+		template<template<typename> class _View = stdex::view>
+		owned_view<_Ty, _Shared, _View> view() const noexcept
 		{
 			if(_released)
-				return owned_view<_Ty, _Shared, _ViewType>(*_view_ptr, nullptr);
+				return owned_view<_Ty, _Shared, _View>(*_view_ptr, nullptr);
 
-			auto lock = shared_ptr_traits<_Shared, _ViewType>::lock(_weak_ptr);
+			auto lock = shared_ptr_traits<_Shared>::lock(_weak_ptr);
 			if (!lock)
 			{
 				_weak_ptr.reset(); //release control block;
 				_released = true;
-				return owned_view<_Ty, _Shared, _ViewType>(*_view_ptr, nullptr);
+				return owned_view<_Ty, _Shared, _View>(*_view_ptr, nullptr);
 			}
 
-			return owned_view<_Ty, _Shared, _ViewType>(*_view_ptr, std::move(lock));
+			return owned_view<_Ty, _Shared, _View>(*_view_ptr, std::move(lock));
 		}
 	};
 
@@ -479,8 +536,9 @@ namespace stdex
 	public:
 		using iterator = typename owned_view<_Ty, _Shared, _ViewType>::iterator;
 		using const_iterator = typename owned_view<_Ty, _Shared, _ViewType>::const_iterator;
-		using reverse_iterator = typename owned_view<_Ty, _Shared, _ViewType>::reverse_iterator;
 		using iterator_category = typename owned_view<_Ty, _Shared, _ViewType>::iterator::iterator_category;
+
+		using iterator_type = owned_view<_Ty, _Shared, _ViewType>::iterator_type;
 
 	public:
 		lock_owned_view(_Ty& container, _Shared&& shared, const lock_share<_LockRAII>& share)
