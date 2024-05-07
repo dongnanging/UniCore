@@ -270,7 +270,7 @@ namespace stdex
 	struct view_base
 	{
 	protected:
-		_Ty* _container;
+		mutable _Ty* _container;
 
 		using iterator = typename _Ty::iterator;
 		using iterator_category = typename _Ty::iterator::iterator_category;
@@ -287,16 +287,33 @@ namespace stdex
 		virtual bool empty() const noexcept { return _container->empty(); }
 	};
 	                                             
-	template<typename _Ty>
-	struct reverse_view : public view_base<_Ty>
+	template<	typename _Ty, 
+				typename = substitution_helper_t<
+					decltype(std::declval<_Ty>().begin()),
+					decltype(std::declval<_Ty>().end()),
+					typename _Ty::iterator,
+					typename _Ty::const_iterator,
+					typename _Ty::reverse_iterator
+		>>
+	struct reverse_view
 	{
+	protected:
+		mutable _Ty* _container;
+
+		using iterator = typename _Ty::iterator;
+		using reverse_iterator = typename _Ty::reverse_iterator;
+		using iterator_category = typename _Ty::iterator::iterator_category;
+
 	public:
 		reverse_view(_Ty& container)
-			: view_base<_Ty>::_container(&container)
+			: _container(&container)
 		{}
 
-		virtual typename view_base<_Ty>::iterator begin() const noexcept override { return view_base<_Ty>::_container->rbegin(); }
-		virtual typename view_base<_Ty>::iterator end() const noexcept override { return view_base<_Ty>::_container->rend(); }
+	public:
+		virtual reverse_iterator begin() const noexcept { return _container->rbegin(); }
+		virtual reverse_iterator end() const noexcept { return _container->rend(); }
+		virtual std::size_t size() const noexcept { return _container->size(); }
+		virtual bool empty() const noexcept { return _container->empty(); }
 	};
 
 	
@@ -326,7 +343,7 @@ namespace stdex
 	struct owned_view : public view_base<_Ty>
 	{
 	protected:
-		_Shared _shared;
+		mutable _Shared _shared;
 
 	public:
 		owned_view(_Ty& container, _Shared&& shared)
@@ -347,9 +364,9 @@ namespace stdex
 	struct shared_view
 	{
 	protected:
-		bool _released;
-		_Ty* _container;
-		decltype(shared_ptr_traits<_Shared>::get_weak(std::declval<_Shared>())) _weak_ptr;
+		mutable bool _released;
+		mutable _Ty* _container;
+		mutable decltype(shared_ptr_traits<_Shared>::get_weak(std::declval<_Shared>())) _weak_ptr;
 	public:
 		shared_view(_Ty& container, const _Shared& origin)
 			: _container(&container), _released(false)
@@ -357,7 +374,7 @@ namespace stdex
 			_weak_ptr = shared_ptr_traits<_Shared>::get_weak(origin);
 		}
 
-		owned_view<_Ty, _Shared> view()
+		owned_view<_Ty, _Shared> view() const noexcept
 		{
 			if(_released)
 				return owned_view<_Ty, _Shared>(*_container, nullptr);
@@ -433,6 +450,9 @@ namespace stdex
 		}
 	};
 
+	template<class _LockRAII>
+	lock_share(_LockRAII) -> lock_share<std::lock_guard<_LockRAII>>;
+
 
 	template<typename _Ty, typename _Shared, typename _LockRAII>
 	struct lock_owned_view : public owned_view<_Ty, _Shared>
@@ -468,17 +488,17 @@ namespace stdex
 	struct lock_view
 	{
 	protected:
-		lock_share<_LockRAII> _share;
-		bool _released;
-		_Ty* _container;
-		decltype(shared_ptr_traits<_Shared>::get_weak(std::declval<_Shared>())) _weak_ptr;
+		mutable lock_share<_LockRAII> _share;
+		mutable bool _released;
+		mutable _Ty* _container;
+		mutable decltype(shared_ptr_traits<_Shared>::get_weak(std::declval<_Shared>())) _weak_ptr;
 
 	public:
 		lock_view(_Ty& container, const _Shared& origin, lock_share<_LockRAII> share)
 			: _container(&container), _weak_ptr(origin), _share(share), _released(false)
 		{}
 
-		lock_owned_view<_Ty, _Shared, _LockRAII> scope_lock_view()
+		lock_owned_view<_Ty, _Shared, _LockRAII> scope_lock_view() const noexcept
 		{
 			if (_released)
 				return lock_owned_view<_Ty, _Shared, _LockRAII>(*_container, nullptr);

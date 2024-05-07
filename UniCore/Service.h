@@ -60,9 +60,10 @@ public:
 	virtual void RemoveSession(const int64& sid);
 	virtual void Start() = 0;
 
-	auto lock_view()
+	const auto& lock_view()
 	{
-
+		return stdex::lock_view(_connected_sessions, shared_from_this(), stdex::lock_share(GET_LOCK));
+		//return _lock_view;
 	}
 
 protected:
@@ -70,7 +71,8 @@ protected:
 
 	std::atomic<uint64> _sessionCount = 1;
 
-	std::unordered_map <uint64, std::shared_ptr<Session>> _connected_sessions;
+	stdex::unordered_map <uint64, std::shared_ptr<Session>> _connected_sessions;
+	//stdex::lock_view<decltype(_connected_sessions), std::shared_ptr< Service>, decltype(GET_LOCK)> _lock_view;
 	Enum_ServiceType _serviceType;
 };
 
