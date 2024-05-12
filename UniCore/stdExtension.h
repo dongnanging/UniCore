@@ -10,7 +10,13 @@ namespace stdex
 
 	template<typename... _Substitutions>
 	using substitution_helper_t = substitution_helper<_Substitutions...>;
+
+	template<typename _Ty>
+	struct always_failed {};
 	
+	template<typename _Ty>
+	using always_failed_t = always_failed<_Ty>::type;
+
 	// =================================
 	// bool - has
 	// =================================
@@ -195,7 +201,7 @@ namespace stdex
 	};
 
 	template<typename _Ty>
-	struct is_string_stl
+	struct is_stl_string
 	{
 		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	std::is_same_v<pure_t, std::string>	 ||
@@ -209,20 +215,50 @@ namespace stdex
 	static constexpr bool is_wchar_str_v = is_wchar_str<_Ty>::value;
 
 	template<typename _Ty>
-	static constexpr bool is_string_stl_v = is_string_stl<_Ty>::value;
+	static constexpr bool is_stl_string_v = is_stl_string<_Ty>::value;
 
 
 	template<typename _Ty>
 	struct is_string
 	{
-		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	is_char_str_v<_Ty>		|| 
 										is_wchar_str_v<_Ty>		||
-										is_string_stl_v<_Ty>;
+										is_stl_string_v<_Ty>;
 	};
 
 	template<typename _Ty>
 	static constexpr bool is_string_v = is_string<_Ty>::value;
+
+
+
+	template<typename _Ty>
+	struct is_cstr
+	{
+		using pure_t = typename pure_type_t<_Ty>;
+		static constexpr bool value =	is_char_str_v<pure_t>		||
+										std::is_same_v<pure_t, std::string>;
+	};
+
+	template<typename _Ty>
+	struct is_wcstr
+	{
+		using pure_t = typename pure_type_t<_Ty>;
+		static constexpr bool value =	is_wchar_str_v<pure_t>		||
+										std::is_same_v<pure_t, std::wstring>;
+	};
+
+	template<typename _Ty>
+	static constexpr bool is_cstr_v = is_cstr<_Ty>::value;
+
+	template<typename _Ty>
+	static constexpr bool is_wcstr_v = is_wcstr<_Ty>::value;
+
+	template<typename _Left, typename _Right>
+	struct __ccpr : std::enable_if<std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>> {};
+
+	template<typename _Left, typename _Right>
+	using __ccpr_t = __ccpr<_Left, _Right>::type;
+
 
 	template<typename _CppType>
 	struct ctype_traits
@@ -230,49 +266,49 @@ namespace stdex
 		using pure_t = pure_type_t<_CppType>;
 
 		template<	typename _Ty, 
-					typename = std::enable_if_t<std::is_same_v<pure_t, pure_type_t<_Ty>>>,
-					typename = std::enable_if_t<is_string_stl_v<pure_t>>
+					typename = __ccpr_t<_Ty, pure_t>,
+					typename = std::enable_if_t<is_stl_string_v<pure_t>>
 		>
-		decltype(auto) ctype(_Ty&& item)
+		static inline decltype(auto) ctype(_Ty&& item)
 		{
 			return item.c_str();		// const char* / const wchar_t*
 		}
 
 
 		template<	typename _Ty, 
-					typename = std::enable_if_t<std::is_same_v<pure_t, pure_type_t<_Ty>>>
+					typename = __ccpr_t<_Ty, pure_t>
 		>
-		std::enable_if_t<is_char_str_v<_Ty>, 
+		static inline std::enable_if_t<is_char_str_v<_Ty>,
 			const char*> ctype(_Ty&& item)
 		{
 			return item;
 		}
 
 		template<	typename _Ty,
-			typename = std::enable_if_t<std::is_same_v<pure_t, pure_type_t<_Ty>>>
+					typename = __ccpr_t<_Ty, pure_t>
 		>
-		std::enable_if_t<is_wchar_str_v<_Ty>,
+		static inline std::enable_if_t<is_wchar_str_v<_Ty>,
 			const wchar_t*> ctype(_Ty&& item)
 		{
 			return item;
 		}
 
 		template<	typename _Ty, 
-					typename = std::enable_if_t<std::is_same_v<pure_t, pure_type_t<_Ty>>>,
-					typename = std::enable_if_t<_not<is_string_v<pure_t>>>					//	문자열 아님
+					typename = __ccpr_t<_Ty, pure_t>,
+					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
+					typename = std::enable_if_t<std::is_fundamental_v<pure_t>>
 			>
-		std::enable_if_t<std::is_fundamental_v<pure_t>,		// 기본 타입. (포인터 제외)
-			_Ty> ctype(_Ty&& item)
+	    static inline _Ty ctype(_Ty&& item)
 		{
 			return item;
 		}
 
 		template<	typename _Ty, 
-					typename = std::enable_if_t<std::is_same_v<pure_t, pure_type_t<_Ty>>>,
-					typename = std::enable_if_t<_not<is_string_v<pure_t>>>					//	문자열 아님
+					typename = __ccpr_t<_Ty, pure_t>,
+					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
+					typename = std::enable_if_t<std::is_pointer_v<pure_t>>
 			>
-		std::enable_if_t<std::is_pointer_v<pure_t>,			// 포인터?
-			_Ty> ctype(_Ty&& item)
+		static inline decltype(auto) ctype(_Ty&& item)
 		{
 			// recursive
 

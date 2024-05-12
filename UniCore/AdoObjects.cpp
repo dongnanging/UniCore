@@ -108,6 +108,7 @@ void ado_conn_object::_close() noexcept
 
 
 SQL_SENDER::SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type)
+    : _query(static_cast<char*>(query_string))
 {
     if (FAILED(_comm.CreateInstance(__uuidof(Command))))
     {
@@ -154,13 +155,13 @@ void SQL_SENDER::on_callback() noexcept
     }
     catch (_com_error& e)
     {
-        DYNAMIC_ASSERT(false, "[COM ERROR] Qeury Callback Error :: %s", CQstr(query_string()));
+        DYNAMIC_ASSERT(false, "[COM ERROR] Qeury Callback Error :: %s", query_string());
         ADOErrorHandler::HandlerError(e);
     }
     catch (...)
     {
         //알 수 없는 오류
-        DYNAMIC_ASSERT(false, "Qeury Callback Error :: %s", CQstr(query_string()));
+        DYNAMIC_ASSERT(false, "Qeury Callback Error :: %s", query_string());
     }
 
     //자원 정리

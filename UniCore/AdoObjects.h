@@ -67,15 +67,8 @@ public:
 
 private:
     template <typename _Cast>
-    _Cast get()
-    {
-        DYNAMIC_ASSERT(false, "invalid cast type %s", typeid(_Cast).name());
+    _Cast get();
 
-        if constexpr (std::is_class_v<_Cast>)
-            return _Cast();
-
-        return _Cast;
-    }
     template <>
     bool get<bool>()
     {
@@ -270,6 +263,16 @@ public:
         _outputs.push_back(std::forward<_Ado_Param_Shared>(output_param));
     }
 
+    auto get_output(const std::size_t& idx)
+        -> std::shared_ptr<ado_parameter>
+    {
+        if (idx > _outputs.size() - 1)
+            return nullptr;
+
+        return _outputs[idx];
+    }
+    
+
 private:
     _RecordsetPtr _record;
     std::shared_ptr<ado_parameter> _ret;
@@ -356,39 +359,36 @@ private:
     }
 
 public:
-    auto set_input(bool&& value)
+    template<typename _Ty>
+    decltype(auto) set_input(_Ty&& value)
     {
-        _set_parameter(std::forward<bool>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adBoolean, sizeof(bool));
-        return this;
-    }
-    auto set_input(int8&& value)
-    {
-        _set_parameter(std::forward<int8>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adTinyInt, sizeof(int8));
-        return this;
-    }
-    auto set_input(int16&& value)
-    {
-        _set_parameter(std::forward<int16>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adSmallInt, sizeof(int16));
-        return this;
-    }
-    auto set_input(int32&& value)
-    {
-        _set_parameter(std::forward<int32>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adInteger, sizeof(int32));
-        return this;
-    }
-    auto set_input(int64&& value)
-    {
-        _set_parameter(std::forward<int64>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adBigInt, sizeof(int64));
-        return this;
-    }
-    auto set_input(const std::string& value)
-    {
-        _set_parameter(value.c_str(), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarChar, -1);
-        return this;
-    }
-    auto set_input(const std::wstring& value)
-    {
-        _set_parameter(value.c_str(), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarWChar, -1);
+        if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, bool> )
+            _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adBoolean, sizeof(_Ty));
+        else if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, int8> )
+            _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adTinyInt, sizeof(_Ty));
+        else if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, int16> )
+            _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adSmallInt, sizeof(_Ty));
+        else if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, int32> )
+            _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adInteger, sizeof(_Ty));
+        else if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, int64> )
+            _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adBigInt, sizeof(_Ty));
+        else if constexpr (stdex::is_cstr_v<_Ty>)
+            _set_parameter(stdex::ctype_traits<_Ty>::ctype(std::forward<_Ty>(value)), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarChar, -1);
+        else if constexpr (stdex::is_wcstr_v<_Ty>)
+            _set_parameter(stdex::ctype_traits<_Ty>::ctype(std::forward<_Ty>(value)), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarWChar, -1);
+        else
+        {
+            static_assert(
+                std::is_same_v<stdex::pure_type_t<_Ty>, bool> ||
+                std::is_same_v<stdex::pure_type_t<_Ty>, int8> ||
+                std::is_same_v<stdex::pure_type_t<_Ty>, int16> ||
+                std::is_same_v<stdex::pure_type_t<_Ty>, int32> ||
+                std::is_same_v<stdex::pure_type_t<_Ty>, int64> ||
+                stdex::is_cstr_v<_Ty> ||
+                stdex::is_wcstr_v<_Ty>
+                , "invalid input paramter");
+        }
+
         return this;
     }
 
@@ -464,11 +464,20 @@ public:
     }
 
 public:
-    inline const auto& query_string() const noexcept { return _comm->CommandText; }
+    inline const auto& query_string() const noexcept { return _query; }
     inline const auto& querying_state() const noexcept { return _comm->State; }
     inline const auto& result() const noexcept { return _result; }
 
-    inline bool isDone() const { return _comm->State != adStateExecuting; }
+    inline bool isDone() const { 
+        try 
+        {
+            return _comm->State != adStateExecuting;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
     void execute(const ConnectOptionEnum& exec_type);
     void on_callback() noexcept;
 
@@ -479,6 +488,8 @@ private:
 private:
     _CommandPtr _comm;
     sql_callback _callback = nullptr;
+
+    std::string _query;
 
     std::shared_ptr<ado_conn_object> _active_conn;
     std::shared_ptr<ado_result> _result;

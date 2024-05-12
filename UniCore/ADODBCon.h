@@ -21,7 +21,7 @@ public:
         auto conn = pop();
         if (!conn)
         {
-            DYNAMIC_ASSERT(false, "invalid connection! query send failed :: %s", static_cast<char*>(proc->query_string()));
+            DYNAMIC_ASSERT(false, "invalid connection! query send failed :: %s", proc->query_string());
             return;
         }
 
@@ -35,7 +35,7 @@ public:
 
 
         //바로 실행 완료되지 않으면 오류로 간주 (즉시 실행이었기 때문에 오류로 간주
-        DYNAMIC_ASSERT(false, "Qeury excute failed :: %s", static_cast<char*>(proc->query_string()));
+        DYNAMIC_ASSERT(false, "Qeury excute failed :: %s", proc->query_string());
         return;
     }
 
@@ -46,7 +46,7 @@ public:
         auto conn = pop();
         if (!conn)
         {
-            DYNAMIC_ASSERT(false, "invalid connection! query send failed :: %s", static_cast<char*>(proc->query_string()));
+            DYNAMIC_ASSERT(false, "invalid connection! query send failed :: %s", proc->query_string());
             return;
         }
 
