@@ -5,7 +5,7 @@
 #include "boost/bind.hpp"
 
 Session::Session()
-	: _connected(false), _sid(0)
+	: _queued_send_count(0), _sid(0), _ip("unknown"), _port(0)
 {
 	_serializeQueue = J_MakeShared<JobQueue>();
 #if defined(__SQL_ODBC)
@@ -13,12 +13,6 @@ Session::Session()
 #endif
 	_recvBuffer = ObjectPool<RecvBuffer>::PoolShared();
 	_recvBuffer->Clear();
-}
-
-Session::~Session()
-{
-	//if (_connected.load() == true)
-	//	Disconnect("Session Destroyed");
 }
 
 void Session::AttachToService(std::shared_ptr<Service> from)
@@ -33,7 +27,7 @@ void Session::AttachService(std::shared_ptr<Service> serivce)
 	_ownedService = serivce;
 }
 
-void Session::Send(const std::shared_ptr<SendData>& sdata)
+void Session::Send(std::shared_ptr<SendData>& sdata)
 {
 	_sendQueue.enqueue(sdata);
 
@@ -43,11 +37,18 @@ void Session::Send(const std::shared_ptr<SendData>& sdata)
 		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
 }
 
-void Session::Send(const std::vector<std::shared_ptr<SendData>>& sdatas)
+void Session::Send(std::shared_ptr<SendData>&& sdata)
 {
-	if (!_socket->is_open())
-		return;
+	_sendQueue.enqueue(std::move(sdata));
 
+	auto prev = _queued_send_count.fetch_add(1);
+	//prev가 0이다? => send완료 후 sub결과가 0이었다 => 등록이 해제되었다 => 재등록해야한다.
+	if (prev == 0)
+		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+}
+
+void Session::Send(std::vector<std::shared_ptr<SendData>>& sdatas)
+{
 	auto size = sdatas.size();
 	_sendQueue.enqueue_all(sdatas);
 
@@ -59,7 +60,6 @@ void Session::Send(const std::vector<std::shared_ptr<SendData>>& sdatas)
 
 void Session::Connected()
 {
-	_connected.store(true);
 	_AttachSelfSession();
 
 	OnConnected();
@@ -71,23 +71,25 @@ void Session::Connected()
 void Session::Disconnect(std::string cause)
 {
 	_JobSerialize([this, cause]() {
-		if (_connected.load() == false)
-			return;
+		try 
+		{
+			//change to global stream?
+			DEBUG_CODE(std::cout << "Session: " << _sid << " is closed.\ncause::" << cause << std::endl);
 
-		_connected.store(false);
-		//change to global stream?
-		DEBUG_CODE(std::cout << "Session: " << _sid << " is closed.\ncause::" << cause << std::endl);
+			//여기서 ref를 해제해도 이 lambda가 끝나기 전까진 capture가 유지된다.
+			//이 블록에 들어온 순간 생존권이 이미 확보된 상태이다.
+			_DetachSelfSession();
 
-		//여기서 ref를 해제해도 이 lambda가 끝나기 전까진 capture가 유지된다.
-		//이 블록에 들어온 순간 생존권이 이미 확보된 상태이다.
-		_DetachSelfSession();
+			OnDisconnected();
 
-		OnDisconnected();
-
-		boost::system::error_code error;
-		_socket->shutdown(boost::asio::socket_base::shutdown_both, error);
-		_socket->close();
-		
+			boost::system::error_code error;
+			_socket->shutdown(boost::asio::socket_base::shutdown_both, error);
+			_socket->close();
+		}
+		catch (...)
+		{
+			DYNAMIC_ASSERT(false, "Disconnect Failed!");
+		}
 		});
 }
 
@@ -105,41 +107,55 @@ void Session::SessionSideDBJob(const std::vector<std::shared_ptr<SQL_Query_Sende
 
 void Session::_RegisterSend()
 {
-	if (!_socket->is_open())
-		return;
-
 	std::vector<std::shared_ptr<SendData>> datas;
-	_sendQueue.dequeue_all(OUT datas);
-	//auto data = _sendQueue.dequeue();
+	try
+	{
+		_sendQueue.dequeue_all(OUT datas);
+		//auto data = _sendQueue.dequeue();
 	
-	//scatter gather
-	std::vector<boost::asio::const_buffer> mdatas;
-	for (int32 i = 0; i < datas.size(); i++)
-		mdatas.push_back(boost::asio::buffer(datas[i]->Buffer(), datas[i]->AllocSize()));
+		//scatter gather
+		std::vector<boost::asio::const_buffer> mdatas;
+		for (int32 i = 0; i < datas.size(); i++)
+			mdatas.push_back(boost::asio::buffer(datas[i]->Buffer(), datas[i]->AllocSize()));
 		
 
-	boost::asio::async_write(
-	/*소켓       */	*_socket,
-	/*전송 데이터*/	mdatas,
-	/*callback   */	boost::bind(
-						&Session::_HandleSend, 
-						shared_from_this(), 
-						datas, boost::asio::placeholders::error, 
-						boost::asio::placeholders::bytes_transferred));
+		boost::asio::async_write(
+		/*소켓       */	*_socket,
+		/*전송 데이터*/	mdatas,
+		/*callback   */	boost::bind(
+							&Session::_HandleSend, 
+							shared_from_this(), 
+							std::move(datas), boost::asio::placeholders::error, 
+							boost::asio::placeholders::bytes_transferred));
+	}
+	catch (...)
+	{
+		DYNAMIC_ASSERT(false, "register send failed. %ll, %s, %d", _sid, _ip, _port);
+
+		if (datas.size() > 0)
+		{
+			_queued_send_count.fetch_sub(datas.size());
+			datas.clear();
+		}
+	}
 }
 
 void Session::_RegisterRecv()
 {
-	if (_socket->is_open() == false)
-		return;
-
-	_socket->async_read_some(
-	/*수신 버퍼*/	boost::asio::buffer(_recvBuffer->WritePos(), _recvBuffer->FreeSize()),
-	/*callback */	boost::bind(
-						&Session::_HandleRecv, 
-						shared_from_this(),
-						boost::asio::placeholders::error, 
-						boost::asio::placeholders::bytes_transferred));
+	try
+	{
+		_socket->async_read_some(
+		/*수신 버퍼*/	boost::asio::buffer(_recvBuffer->WritePos(), _recvBuffer->FreeSize()),
+		/*callback */	boost::bind(
+							&Session::_HandleRecv, 
+							shared_from_this(),
+							boost::asio::placeholders::error, 
+							boost::asio::placeholders::bytes_transferred));
+	}
+	catch (...)
+	{
+		DYNAMIC_ASSERT(false, "register recv failed. %ll, %s, %d", _sid, _ip, _port)
+	}
 }
 
 void Session::_HandleSend(std::vector<std::shared_ptr<SendData>> raw_datas, const boost::system::error_code& error, size_t bytes_transferred)
@@ -175,6 +191,7 @@ void Session::_HandleRecv(const boost::system::error_code& error, size_t bytes_t
 		return;
 	}
 
+	// 연결 해제 요청
 	if (bytes_transferred == 0)
 	{
 		Disconnect();
@@ -249,9 +266,9 @@ int32 Session::_PacketCheck()
 	}
 
 	if (recv_datas.size() > 0)
-		_JobSerialize([this, datas = std::move(recv_datas)]() {
+		_JobSerialize([this, datas = std::move(recv_datas)]() mutable {
 		for (auto& data : datas)
-			OnRecv(data);
+			OnRecv(std::move(data));
 			});
 
 	return plen;

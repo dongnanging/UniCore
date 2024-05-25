@@ -77,7 +77,7 @@ struct variadic_format_string
 	requires is_character<_Format>
 	static inline void format_print(_Format form_str, _Args&&... args)
 	{
-		std::fprintf(file_log_dest, form_str, std::forward<_Args>(args)...);
+		std::fprintf(file_log_dest, form_str, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
 		std::fprintf(file_log_dest, "\n");
 	}
 
@@ -85,7 +85,7 @@ struct variadic_format_string
 	requires is_wide_character<_Format>
 	static inline void format_print(_Format form_str, _Args&&... args)
 	{
-		std::fwprintf(file_log_dest, form_str, std::forward<_Args>(args)...);
+		std::fwprintf(file_log_dest, form_str, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
 		std::fwprintf(file_log_dest, L"\n");
 	}
 };

@@ -159,14 +159,6 @@ namespace stdex
 	template <typename _Ty>
 	struct pure_type<_Ty, true> : remove_all_pointer<pure_type<_Ty>> {};
 
-
-	template<typename _Ty, std::size_t N>
-	struct static_arr_size
-	{
-		static constexpr std::size_t value = N;
-	};
-
-
 	
 	template<typename _Ty>
 	using remove_all_const_t = typename remove_all_const<_Ty>::type;
@@ -176,10 +168,16 @@ namespace stdex
 
 
 	// =================================
-	// values
+	// values 2
 	// =================================
-	template<typename _Ty>
-	static constexpr std::size_t static_arr_size = static_arr_size<_Ty>::value;
+	template<typename _Left, typename _Right>
+	struct is_same
+	{
+		static constexpr bool value = std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>
+	};
+
+	template<typename _Left, typename _Right>
+	static constexpr bool is_same_v = is_same<_Left, _Right>::value;
 
 	// =================================
 	// ctype
@@ -254,10 +252,10 @@ namespace stdex
 	static constexpr bool is_wcstr_v = is_wcstr<_Ty>::value;
 
 	template<typename _Left, typename _Right>
-	struct __ccpr : std::enable_if<std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>> {};
+	struct enable_same : std::enable_if<std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>> {};
 
 	template<typename _Left, typename _Right>
-	using __ccpr_t = __ccpr<_Left, _Right>::type;
+	using enable_same_t = enable_same<_Left, _Right>::type;
 
 
 	template<typename _CppType>
@@ -266,7 +264,7 @@ namespace stdex
 		using pure_t = pure_type_t<_CppType>;
 
 		template<	typename _Ty, 
-					typename = __ccpr_t<_Ty, pure_t>,
+					typename = enable_same_t<_Ty, pure_t>,
 					typename = std::enable_if_t<is_stl_string_v<pure_t>>
 		>
 		static inline decltype(auto) ctype(_Ty&& item)
@@ -276,7 +274,7 @@ namespace stdex
 
 
 		template<	typename _Ty, 
-					typename = __ccpr_t<_Ty, pure_t>
+					typename = enable_same_t<_Ty, pure_t>
 		>
 		static inline std::enable_if_t<is_char_str_v<_Ty>,
 			const char*> ctype(_Ty&& item)
@@ -285,7 +283,7 @@ namespace stdex
 		}
 
 		template<	typename _Ty,
-					typename = __ccpr_t<_Ty, pure_t>
+					typename = enable_same_t<_Ty, pure_t>
 		>
 		static inline std::enable_if_t<is_wchar_str_v<_Ty>,
 			const wchar_t*> ctype(_Ty&& item)
@@ -294,7 +292,7 @@ namespace stdex
 		}
 
 		template<	typename _Ty, 
-					typename = __ccpr_t<_Ty, pure_t>,
+					typename = enable_same_t<_Ty, pure_t>,
 					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
 					typename = std::enable_if_t<std::is_fundamental_v<pure_t>>
 			>
@@ -304,7 +302,7 @@ namespace stdex
 		}
 
 		template<	typename _Ty, 
-					typename = __ccpr_t<_Ty, pure_t>,
+					typename = enable_same_t<_Ty, pure_t>,
 					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
 					typename = std::enable_if_t<std::is_pointer_v<pure_t>>
 			>
@@ -313,7 +311,7 @@ namespace stdex
 			// recursive
 
 			// 껍질 깐다~
-			return ctype_traits<*_Ty>::ctype(*item);
+			return ctype_traits<_Ty>::ctype(*item);
 		}
 	};
 
@@ -322,6 +320,27 @@ namespace stdex
 	struct sprintf_traits
 	{
 		using pure_t = typename pure_type_t<_Type>;
+
+		//포인터 제외 ctype으로 변환
+		template<	typename _Ty,
+					typename = enable_same_t<_Ty, pure_t>,
+					typename = std::enable_if_t<!std::is_pointer_v<pure_t>>
+		>
+		static constexpr decltype(auto) safe_type(_Ty&& item)
+		{
+			return ctype_traits<_Type>::ctype(item);
+		}
+
+
+		//포인터는 %p로 쓰지 않았을 가능성을 생각해서 uintptr_t로 변경
+		template<	typename _Ty,
+					typename = enable_same_t<_Ty, pure_t>,
+					typename = std::enable_if_t<std::is_pointer_v<pure_t>>
+		>
+		static constexpr std::uintptr_t safe_type(_Ty&& item)
+		{
+			return reinterpret_cast<std::uintptr_t>(item);
+		}
 	};
 	
 	// =================================
@@ -376,7 +395,7 @@ namespace stdex
 	};
 	
 	template<typename _Ty>
-	view(_Ty) -> view<_Ty>;
+	stdex::view(_Ty) -> stdex::view<_Ty>;
 
 	                                             
 	template<	typename _Ty>
@@ -692,4 +711,28 @@ namespace stdex
 	{
 		return std::wstring().assign(source.begin(), source.end());
 	}
+
+
+
+	// =================================
+	// utils
+	// =================================
+	// trim from left 
+	static constexpr void ltrim(std::wstring& s, const wchar_t* t = L" \t\n\r\f\v")
+	{
+		s.erase(0, s.find_first_not_of(t));
+	}
+	// trim from right 
+	static constexpr void rtrim(std::wstring& s, const wchar_t* t = L" \t\n\r\f\v")
+	{
+		s.erase(s.find_last_not_of(t) + 1);
+	}
+	// trim from left & right 
+	static constexpr void trim(std::wstring& s, const wchar_t* t = L" \t\n\r\f\v")
+	{
+		rtrim(s, t);
+		ltrim(s, t);
+	}
+
+	std::vector<std::wstring> split(std::wstring str, wchar_t delimiter);
 }

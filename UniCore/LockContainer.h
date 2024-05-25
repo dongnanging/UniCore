@@ -16,10 +16,11 @@ public:
 	}
 
 public:
-	void push_front(const _Ty& item)
+	template<typename _Uy, typename = stdex::enable_same_t<_Ty, _Uy>>
+	void push_front(_Uy&& item)
 	{
 		WRITE_LOCK;
-		_container.push_front(item);
+		_container.push_front(std::forward<_Uy>(item));
 	}
 	_Ty& pop_front()
 	{
@@ -29,10 +30,11 @@ public:
 		return result;
 	}
 
-	void push_back(const _Ty& item)
+	template<typename _Uy, typename = stdex::enable_same_t<_Ty, _Uy>>
+	void push_back(_Uy&& item)
 	{
 		WRITE_LOCK;
-		_container.push_back(item);
+		_container.push_back(std::forward<_Uy>(item));
 	}
 	_Ty& pop_back()
 	{
@@ -63,7 +65,7 @@ public:
 		WRITE_LOCK;
 		while (_container.empty() == false)
 		{
-			result.push_back(_container.front());
+			result.push_back(std::move(_container.front()));
 			_container.pop_front();
 		}
 			
@@ -74,25 +76,25 @@ public:
 		WRITE_LOCK;
 		while (_container.empty() == false)
 		{
-			result.push_back(_container.back());
+			result.push_back(std::move(_container.back()));
 			_container.pop_back();
 		}
 	}
 
-	bool emmpty()
+	constexpr bool emmpty() const noexcept
 	{
 		READ_LOCK;
 		return _container.empty();
 	}
 
 public:
-	_Ty& operator[](int index)
+	_Ty& operator[](const int& index) const
 	{
 		READ_LOCK;
 		return _container[index];
 	}
 
-	int32 size() { READ_LOCK; return _container.size(); }
+	constexpr int32 size() const noexcept { READ_LOCK; return _container.size(); }
 
 private:
 	USE_LOCK;
@@ -111,13 +113,14 @@ public:
 		return result;
 	}
 
-	void enqueue(const _Ty& item)
+	template<typename _Uy, typename = stdex::enable_same_t<_Ty, _Uy>>
+	void enqueue(_Uy&& item)
 	{
 		WRITE_LOCK;
-		_container.push(item);
+		_container.push(std::forward<_Uy>(item));
 	}
 
-	void enqueue_all(const std::vector<_Ty>& items)
+	void enqueue_all(std::vector<_Ty>& items)
 	{
 		WRITE_LOCK;
 		for (auto& item : items)
@@ -132,15 +135,12 @@ public:
 	}
 
 public:
-	void dequeue_all(std::vector<_Ty>& result, const int32& targetCount = 0x7fff'ffff)
+	void dequeue_all(std::vector<_Ty>& result)
 	{
 		WRITE_LOCK;
 		while (_container.empty() == false)
 		{
-			if (result.size() >= targetCount)
-				return;
-
-			result.push_back(_container.front());
+			result.push_back(std::move(_container.front()));
 			_container.pop();
 		}
 	}
@@ -164,10 +164,11 @@ public:
 		return result;
 	}
 
-	void push(const _Ty& item)
+	template<typename _Uy, typename = stdex::enable_same_t<_Ty, _Uy>>
+	void push(_Uy&& item)
 	{
 		WRITE_LOCK;
-		_container.push(item);
+		_container.push(std::forward<_Uy>(item));
 	}
 
 	template<typename... Args>
@@ -183,7 +184,7 @@ public:
 		WRITE_LOCK;
 		while (_container.empty() == false)
 		{
-			result.push_back(_container.top());
+			result.push_back(std::move(_container.top()));
 			_container.pop();
 		}
 	}

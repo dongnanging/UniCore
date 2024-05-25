@@ -7,7 +7,6 @@ using namespace boost::asio::ip;
 class Session;
 class Service;
 
-
 class Session : public std::enable_shared_from_this<Session>
 {
 	friend class Service;
@@ -16,7 +15,6 @@ class Session : public std::enable_shared_from_this<Session>
 
 protected:
 	Session();
-	virtual ~Session();
 
 public:
 	void AttachToService(std::shared_ptr<Service> from);
@@ -24,8 +22,9 @@ public:
 
 public:
 	virtual void Start() = 0;
-	void Send(const std::shared_ptr<SendData>& sdata);
-	void Send(const std::vector<std::shared_ptr<SendData>>& sdatas);
+	void Send(std::shared_ptr<SendData>& sdata);
+	void Send(std::shared_ptr<SendData>&& sdata);
+	void Send(std::vector<std::shared_ptr<SendData>>& sdatas);
 	void Connected();
 	void Disconnect(std::string cause = "Disconnect Called");
 
@@ -39,10 +38,14 @@ public:
 #endif
 
 protected:
+	// shared from this로 생존권 얻고 예약
 	void _RegisterSend();
+	// shared from this로 생존권 얻고 예약
 	void _RegisterRecv();
 
+	// 해당 callback이 끝나기 전까지 자기 자신의 shared_ptr의 shared_count > 0 임이 유지됨
 	void _HandleSend(std::vector<std::shared_ptr<SendData>> raw_datas, const boost::system::error_code& error, size_t bytes_transferred);
+	// 해당 callback이 끝나기 전까지 자기 자신의 shared_ptr의 shared_count > 0 임이 유지됨
 	void _HandleRecv(const boost::system::error_code& error, size_t bytes_transferred);
 
 	void _HandleError(const boost::system::error_code& error);
@@ -60,28 +63,24 @@ protected:
 	virtual void OnRecv(const std::shared_ptr<RecvData>& recvData) = 0;
 
 public:
-	const uint64& sid() const { return _sid; }
+	const uint64& sid() const noexcept { return _sid; }
 	void set_sid(const uint64& sid) { _sid = sid; }
-	virtual const int64& unique_id() const noexcept { return _sid; }
-	virtual const int64& enter_id() const noexcept { return _sid; }
 
-	virtual const std::string& ip() { return _ip; }
-	virtual const uint16& port() { return _port; }
+	virtual const std::string& ip() const noexcept { return _ip; }
+	virtual const uint16& port() const noexcept { return _port; }
 protected:
 	uint64 _sid;
-	std::string _ip = "unknown";
-	uint16 _port = 0;
+	std::string _ip;
+	uint16 _port;
 
 protected:
 	SOCKET _socket;
-	std::atomic<bool> _connected;
-
 	std::weak_ptr<Service> _ownedService;
 
 protected:
 	//send
 	LockContainer < std::shared_ptr<SendData>, std::queue<std::shared_ptr<SendData>>> _sendQueue;
-	std::atomic<int32> _queued_send_count = 0;
+	std::atomic<int32> _queued_send_count;
 
 	//recv
 	std::shared_ptr<RecvBuffer> _recvBuffer;
@@ -108,11 +107,14 @@ class ActiveSession : public Session
 public:
 	virtual void Start() override;
 
-	auto set_endpoint(const char ip[], const uint16& port) { _port = port, _ep = tcp::endpoint(boost::asio::ip::address::from_string(ip), port); return this; }
+	auto set_endpoint(const char ip[], const uint16& port)
+	{
+		_port = port;
+		_ep = tcp::endpoint(boost::asio::ip::address::from_string(ip), port); 
+		_ip = _ep.address().to_string(); 
+		return this; 
+	}
 	void set_reconnection_interval(const int64& interval) { _reconnection_interval = interval; }
-
-public:
-	virtual const std::string& ip() override { return _ep.address().to_string(); }
 
 protected:
 	void _HandleConnect(const boost::system::error_code& error);
