@@ -46,8 +46,24 @@ public:
 
 	void AddList(std::shared_ptr<item_type> item) { _arrays.push_back(item); }
 
-	std::shared_ptr<item_type> get(const std::size_t& idx) { if (idx > _arrays.size()) return nullptr; return _arrays[idx]; }
-	std::shared_ptr<item_type> operator [] (const size_t& idx) { if (idx > _arrays.size()) return nullptr;  return _arrays[idx]; }
+	std::shared_ptr<item_type> get(const std::size_t& idx) 
+	{ 
+		if (idx > _arrays.size() - 1 || _value_type != JOType::ARRAY)
+		{ 
+			DYNAMIC_ASSERT(false, "invalid json value_type"); 
+			return nullptr; 
+		} 
+		return _arrays[idx]; 
+	}
+	std::shared_ptr<item_type> operator [] (const size_t& idx) 
+	{
+		if (idx > _arrays.size() - 1 || _value_type != JOType::ARRAY)
+		{
+			DYNAMIC_ASSERT(false, "invalid json value_type");
+			return nullptr;
+		} 
+		return _arrays[idx]; 
+	}
 
 	auto list_view() { return stdex::shared_view(_arrays, enable_shared::shared_from_this()); }
 
@@ -127,8 +143,25 @@ protected:
 
 public:
 	void AddPair(std::shared_ptr<item_type> item) { _childs.insert({ item->_key, item }); }
-	std::shared_ptr<item_type> get(const _StrType& key) { if (_childs.find(key) == _childs.end()) return nullptr; return _childs[key]; }
-	std::shared_ptr<item_type> operator [] (const _StrType& key) { if (_childs.find(key) == _childs.end()) return nullptr; return _childs[key]; }
+	std::shared_ptr<item_type> get(const _StrType& key) 
+	{ 
+		if (_childs.find(key) == _childs.end() || Base::_value_type != JOType::SUBJSON)
+		{
+			DYNAMIC_ASSERT(false, "invalid json value_type"); return nullptr;
+			return nullptr;
+		}
+		
+		return _childs[key]; 
+	}
+	std::shared_ptr<item_type> operator [] (const _StrType& key) 
+	{
+		if (_childs.find(key) == _childs.end() || Base::_value_type != JOType::SUBJSON)
+		{
+			DYNAMIC_ASSERT(false, "invalid json value_type"); return nullptr;
+			return nullptr;
+		}
+		return _childs[key]; 
+	}
 
 	auto child_view() { return stdex::shared_view(_childs, enable_shared::shared_from_this()); }
 
