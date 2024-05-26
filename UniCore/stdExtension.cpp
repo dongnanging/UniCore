@@ -16,3 +16,13 @@ std::vector<std::wstring> stdex::split(std::wstring str, wchar_t delimiter)
 
 	return result;
 }
+
+bool stdex::make_directory(const wchar_t* directory_path)
+{
+	if ((_waccess(directory_path, 0)) == -1) //여기에 jsonBackup폴더가 없으면...    => _T는 L"" 과 유사한 wstring 표현식 
+		CreateDirectory(directory_path, NULL);
+	else
+		return true;
+
+	return (_waccess(directory_path, 0)) != -1;
+}

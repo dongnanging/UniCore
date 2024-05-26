@@ -173,7 +173,7 @@ namespace stdex
 	template<typename _Left, typename _Right>
 	struct is_same
 	{
-		static constexpr bool value = std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>
+		static constexpr bool value = std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>;
 	};
 
 	template<typename _Left, typename _Right>
@@ -652,6 +652,73 @@ namespace stdex
 	};
 
 
+	struct view_maker
+	{
+		template<typename _Container, typename... _Args>
+		decltype(auto) get_view(_Container& container, _Args&&... args)
+		{
+			if constexpr (std::is_constructible_v<stdex::view, _Args...>)
+				return stdex::view(std::forward<_Args>(args)...);
+			else if constexpr (std::is_constructible_v<stdex::shared_view, _Args...>)
+				return stdex::shared_view(std::forward<_Args>(args)...);
+			else if constexpr (std::is_constructible_v<stdex::lock_view, _Args...>)
+				return stdex::lock_view(std::forward<_Args>(args)...);
+			else
+			{
+				static_assert(std::is_constructible_v<stdex::view, _Args...> ||
+					std::is_constructible_v<stdex::shared_view, _Args...> ||
+					std::is_constructible_v<stdex::lock_view, _Args...>
+					, "connot make view");
+				return nullptr;
+			}
+		}
+	};
+
+	// =================================
+	// func traits
+	// =================================
+	
+	// Primary template
+	template<typename T>
+	struct function_traits;
+
+	// Function pointer specialization
+	template<typename _Ret, typename... _Args>
+	struct function_traits<_Ret(*)(_Args...)>
+	{
+		using ret_type = _Ret;
+		using params_type = std::tuple<_Args...>;
+	};
+
+	// Function reference specialization
+	template<typename _Ret, typename... _Args>
+	struct function_traits<_Ret(&)(_Args...)>
+	{
+		using ret_type = _Ret;
+		using params_type = std::tuple<_Args...>;
+	};
+
+	// Member function pointer specialization => mutable lambda operator()
+	template<typename _Class, typename _Ret, typename... _Args>
+	struct function_traits<_Ret(_Class::*)(_Args...)>
+	{
+		using ret_type = _Ret;
+		using params_type = std::tuple<_Args...>;
+	};
+
+	// Const member function pointer specialization => lambda operator()
+	template<typename _Class, typename _Ret, typename... _Args>
+	struct function_traits<_Ret(_Class::*)(_Args...) const>
+	{
+		using ret_type = _Ret;
+		using params_type = std::tuple<_Args...>;
+	};
+
+	// type Deduction guide for lambda expressions
+	template<typename _Lambda>
+	function_traits(_Lambda) -> function_traits<decltype(&_Lambda::operator())>;
+
+
 	// =================================
 	// func
 	// =================================
@@ -713,6 +780,35 @@ namespace stdex
 	}
 
 
+	// =================================
+	// file stream
+	// =================================
+	namespace cvt
+	{
+		enum class Encode : uint8
+		{
+			None = 0,
+			ASCII,
+			UniCode,
+		};
+
+		class Unicodecvt : public std::codecvt<wchar_t, char, mbstate_t>
+		{
+		protected:
+			virtual bool do_always_noconv() const noexcept
+			{
+				return true;
+			}
+		};
+	}
+
+	template<typename _Stream>
+	static constexpr void imbue(_Stream& stream, cvt::Encode encode)
+	{
+		stream.imbue(std::locale(std::locale(stream.getloc()), new cvt::Unicodecvt));
+	}
+
+
 
 	// =================================
 	// utils
@@ -734,5 +830,15 @@ namespace stdex
 		ltrim(s, t);
 	}
 
+	static constexpr void reverse(std::string& str)
+	{
+		std::reverse(str.begin(), str.end());
+	}
+	static constexpr void reverse(std::wstring& str)
+	{
+		std::reverse(str.begin(), str.end());
+	}
+
 	std::vector<std::wstring> split(std::wstring str, wchar_t delimiter);
+	bool make_directory(const wchar_t* directory_path);
 }

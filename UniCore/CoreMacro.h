@@ -68,24 +68,24 @@
 #else
 #define file_log_dest
 #endif
-template <typename _Ty> concept is_character = std::is_same_v<stdex::remove_all_const_t<_Ty>, char*>;
-template <typename _Ty> concept is_wide_character = std::is_same_v<stdex::remove_all_const_t<_Ty>, wchar_t*>;
+template <typename _Ty> concept is_character = stdex::is_cstr_v<_Ty>;
+template <typename _Ty> concept is_wide_character = stdex::is_wcstr_v<_Ty>;
 
 struct variadic_format_string
 {
 	template<typename _Format, typename... _Args>
 	requires is_character<_Format>
-	static inline void format_print(_Format form_str, _Args&&... args)
+	static inline void format_print(_Format&& form_str, _Args&&... args)
 	{
-		std::fprintf(file_log_dest, form_str, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+		std::fprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
 		std::fprintf(file_log_dest, "\n");
 	}
 
 	template<typename _Format, typename... _Args>
 	requires is_wide_character<_Format>
-	static inline void format_print(_Format form_str, _Args&&... args)
+	static inline void format_print(_Format&& form_str, _Args&&... args)
 	{
-		std::fwprintf(file_log_dest, form_str, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+		std::fwprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
 		std::fwprintf(file_log_dest, L"\n");
 	}
 };
