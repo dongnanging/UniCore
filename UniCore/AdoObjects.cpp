@@ -63,6 +63,30 @@ bool ado_result::move_first()
     return true;
 }
 
+bool ado_result::move_next()
+{
+    if (empty())
+        return false;
+
+    try
+    {
+        _record->MoveNext();
+    }
+    catch (_com_error& e)
+    {
+        ADOErrorHandler::HandlerError(e);
+        return false;
+    }
+    catch (...)
+    {
+        //알 수 없는 오류
+        DYNAMIC_ASSERT(false, "ADODB");
+        return false;
+    }
+    
+    return true;
+}
+
 ado_conn_object::ado_conn_object(std::shared_ptr<DBConnector> owner, const _bstr_t& conn_string)
     : _owner(owner)
 {
@@ -155,7 +179,6 @@ void SQL_SENDER::on_callback() noexcept
     }
     catch (_com_error& e)
     {
-        DYNAMIC_ASSERT(false, "[COM ERROR] Qeury Callback Error :: %s", query_string());
         ADOErrorHandler::HandlerError(e);
     }
     catch (...)

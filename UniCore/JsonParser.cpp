@@ -3,253 +3,37 @@
 
 #include "StringTools.h"
 
-std::string _StringOpener(const std::string& source, int32& indexer)
+template<typename _StrType>
+_StrType _StringOpener(const _StrType& source, int32& indexer)
 {
-	std::string result;
+	_StrType result;
 	for (int32 i = indexer; i < source.size(); i++)
 	{
-		if (source[i] == '\"')
+		if (source[i] == stdex::str_elem<_StrType>::elem('\"'))
 		{
-			if (i != 0 && source[i - 1] == '\\')
+			if (i != 0 && source[i - 1] == stdex::str_elem<_StrType>::elem('\\'))
 			{
-				result[result.size() - 1] = '\"';
+				result[result.size() - 1] = stdex::str_elem<_StrType>::elem('\"');
 				continue;
 			}
 
-			indexer = ++i;
+			indexer = i;
 			return result;
 		}
 
 		result += source[i];
 	}
 
-	return  result;
-}
-
-std::string Rewind(const std::string& source, const int32& indexer)
-{
-	std::string result;
-	for (int32 i = indexer; i >= 0; i--)
-	{
-		if (source[i] == ':')
-		{
-			return StringTools::reverse(StringTools::trim(result));
-		}
-
-		result += source[i];
-	}
-
-	return StringTools::reverse(StringTools::trim(result));
-}
-
-
-
-
-std::shared_ptr<JsonItem> JsonParser::Parse(const std::string& source_file)
-{
-	std::fstream reader;
-	reader.open(source_file);
-
-	std::string line_buffer;
-	std::string json_string = "";
-	while (std::getline(reader, line_buffer))
-	{
-		json_string += line_buffer + "\n";
-	}
-
-	std::shared_ptr<JsonItem> head;
-	int32 index = 0;
-	auto result = _Parse(head, ' ', json_string, index);
-	if (result.size() == 1)
-	{
-		head = result[0];
-	}
-	else
-	{
-		for (auto item : result)
-		{
-			head->AddPair(item);
-		}
-	}
-
-	//auto test = (*head)["default_selling_price"];
-	return head;
-}
-
-std::vector<std::shared_ptr<JsonItem>> JsonParser::_Parse(const std::shared_ptr<JsonItem>& parent, const char opening, const std::string& source, int32& indexer)
-{
-	std::shared_ptr<JsonItem> item = J_MakeShared<JsonItem>(parent);
-	std::vector<std::shared_ptr<JsonItem>> result;
-	result.push_back(item);
-
-	char close;
-	switch (opening)
-	{
-	case '{':
-		close = '}';
-		break;
-	case '[':
-		close = ']';
-		break;
-	default:
-		close = ' ';
-		break;
-	}
-
-	for (int32 i = indexer; i < source.size(); i++)
-	{
-		// 닫김 (최상위 일 경우, 굳이 key, value값을 요구하지 않음)
-		if (source[i] == close && close != ' ')
-		{
-			// key가 존재하고, value가 없을경우
-			if (item->_key != "" && item->_has_value == false)
-			{
-				// ':' 토큰까지 되감으면서, : 토큰 이후의 값을 value로 지정 (문자열은 아닌 value)
-				auto value = Rewind(source, i - 1);
-				if (value == "")
-					CRASH("");
-
-				item->set_value(value);
-			}
-
-			indexer = ++i;
-			return result;
-		}
-
-		switch (source[i])
-		{
-		//명시된 문자열 => 문자열 안에 내용들이 아래 다른 case에 잡히지 않도록, 문자열 종료를 다시 만날 때 까지 계속 진행
-		case '\"':
-		{
-			//만약 이전 토큰이 '\\' 일경우, 해당 토큰은 \" 토큰으로 간주
-			if (i > 0 && i < source.size() - 1 && source[i] == '\\')
-				break;
-
-			// key가 없다면 key로 설정
-			if (item->_key == "")
-				item->_key = _StringOpener(source, ++i);
-			// key는 있지만 value는 없는 경우, value로 설정
-			else
-				item->set_value(_StringOpener(source, ++i));
-
-			break;
-		}
-
-		//하위 아이템을 가지는 경우
-		case '{':
-		{
-			// key가 없는데 하위 아이템을 선언한 경우
-			if (item->_key == "" && close != ' ')
-				CRASH("");
-
-			auto childs = _Parse(item, '{', source, ++i);
-			for (auto child : childs)
-			{
-				item->AddPair(child);
-			}
-
-			break;
-		}
-		//리스트
-		case '[':
-		{
-			if (item->_key == "")
-				CRASH("");
-
-			auto childs = _Parse(item, '[', source, ++i);
-			for (auto child : childs)
-			{
-				item->AddList(child);
-			}
-
-			break;
-		}
-		// sep. 다음 원소로 넘어감
-		case ',':
-		{
-			if (item->_key == "")
-				CRASH("");
-
-			auto value = Rewind(source, i - 1);
-			if(value == "")
-				CRASH("");
-
-			item->set_value(value);
-
-			item = J_MakeShared<JsonItem>(parent);
-			result.push_back(item);
-			continue;
-
-			break;
-		}
-
-		// 주석인지 여부 => json이 지원 안해도 난 지원할거야 ^^
-		case '/':
-		{
-			if (i != 0 && source[i - 1] == '/')
-			{
-				while (i < source.size() - 1 && source[i] != '\n')
-				{
-					i++;
-				}
-				i++;
-				continue;
-			}
-
-			break;
-		}
-		}
-	}
-
-	
-
-	// key가 존재하고, value가 없을경우
-	if (item->_key != "" && item->_has_value == false)
-	{
-		//모든 for문을 마쳤지만, 닫기지 않고, 값이 없는 경우.
-		DYNAMIC_ASSERT(false, "json parse failed! check json file");
-
-		auto value = Rewind(source, source.size() - 1);
-		if (value == "")
-			CRASH("");
-
-		item->set_value(value);
-	}
-
-	indexer = source.size();
 	return result;
 }
 
-
-std::wstring _StringOpenerW(const std::wstring& source, int32& indexer)
+template<typename _StrType>
+_StrType Rewind(const _StrType& source, const int32& indexer)
 {
-	std::wstring result;
-	for (int32 i = indexer; i < source.size(); i++)
-	{
-		if (source[i] == L'\"')
-		{
-			if (i != 0 && source[i - 1] == L'\\')
-			{
-				result[result.size() - 1] = L'\"';
-				continue;
-			}
-
-			indexer = ++i;
-			return result;
-		}
-
-		result += source[i];
-	}
-
-	return  result;
-}
-
-std::wstring RewindW(const std::wstring& source, const int32& indexer)
-{
-	std::wstring result;
+	_StrType result;
 	for (int32 i = indexer; i >= 0; i--)
 	{
-		if (source[i] == ':')
+		if (source[i] == stdex::str_elem<_StrType>::elem(':'))
 		{
 			stdex::trim(result);
 			stdex::reverse(result);
@@ -264,141 +48,113 @@ std::wstring RewindW(const std::wstring& source, const int32& indexer)
 	return result;
 }
 
-std::shared_ptr<JsonItemW> JsonParserW::Parse(const std::wstring& source_file, const int& io_type, const stdex::cvt::Encode& type)
+template<typename _JsonItemType>
+std::vector<std::shared_ptr<_JsonItemType>> _SealedParser(const std::shared_ptr<_JsonItemType>& parent, const char opening, const typename _JsonItemType::string_type& source, int32& indexer)
 {
-	std::wfstream reader;
-	reader.open(source_file, io_type);
-	stdex::imbue(reader, type);
+	using converter = stdex::str_elem<typename _JsonItemType::string_type>;
 
-	std::wstring line_buffer;
-	std::wstring json_string;
-	while (std::getline(reader, line_buffer))
-	{
-		json_string += line_buffer + L"\n";
-	}
-
-	std::shared_ptr<JsonItemW> head;
-	int32 index = 0;
-	auto result = _Parse(head, ' ', json_string, index);
-	if (result.size() == 1)
-	{
-		head = result[0];
-	}
-	else
-	{
-		for (auto item : result)
-		{
-			head->AddPair(item);
-		}
-	}
-
-	//auto test = (*head)["default_selling_price"];
-	return head;
-}
-
-std::vector<std::shared_ptr<JsonItemW>> JsonParserW::_Parse(const std::shared_ptr<JsonItemW>& parent, const wchar_t opening, const std::wstring& source, int32& indexer)
-{
-	std::shared_ptr<JsonItemW> item = J_MakeShared<JsonItemW>(parent);
-	std::vector<std::shared_ptr<JsonItemW>> result;
+	std::shared_ptr<_JsonItemType> item = J_MakeShared<_JsonItemType>(parent);
+	std::vector<std::shared_ptr<_JsonItemType>> result;
 	result.push_back(item);
 
-	wchar_t close;
+	typename _JsonItemType::string_type::value_type close;
 	switch (opening)
 	{
-	case L'{':
-		close = L'}';
+	case converter::elem('{'):
+		close = converter::elem('}');
 		break;
-	case L'[':
-		close = L']';
+	case converter::elem('['):
+		close = converter::elem(']');
 		break;
 	default:
-		close = L' ';
+		close = converter::elem(' ');
 		break;
 	}
 
-	for (int32 i = indexer; i < source.size(); i++)
+	for (int32 i = indexer; i < std::size(source); i++)
 	{
 		// 닫김 (최상위 일 경우, 굳이 key, value값을 요구하지 않음)
-		if (source[i] == close && close != L' ')
+		if (source[i] == close && close != converter::elem(' '))
 		{
 			// key가 존재하고, value가 없을경우
-			if (item->_key.size() > 0 && item->_has_value == false)
+			if (std::size(item->key()) > 0 && !item->has_value() &&
+				item->type() != JOType::ARRAY && item->type() != JOType::SUBJSON)
 			{
 				// ':' 토큰까지 되감으면서, : 토큰 이후의 값을 value로 지정 (문자열은 아닌 value)
-				auto value = RewindW(source, i - 1);
-				if (value == L"")
-					CRASH("");
+				auto value = Rewind(source, i - 1);
+				if (std::size(value) == 0)
+				{
+					DYNAMIC_ASSERT(false, "json parse failed! check json file");
+					indexer = std::size(source);
+				}
 
 				item->set_value(value);
 			}
 
-			indexer = ++i;
+			indexer = i;
 			return result;
 		}
 
 		switch (source[i])
 		{
 			//명시된 문자열 => 문자열 안에 내용들이 아래 다른 case에 잡히지 않도록, 문자열 종료를 다시 만날 때 까지 계속 진행
-		case L'\"':
+		case converter::elem('\"'):
 		{
 			//만약 이전 토큰이 '\\' 일경우, 해당 토큰은 \" 토큰으로 간주
-			if (i > 0 && i < source.size() - 1 && source[i] == L'\\')
+			if (i > 0 && i < std::size(source) - 1 && source[i] == converter::elem('\\'))
 				break;
 
 			// key가 없다면 key로 설정
-			if (item->_key.size() == 0)
-				item->_key = _StringOpenerW(source, ++i);
+			if (std::size(item->key()) == 0)
+				item->set_key(_StringOpener(source, ++i));
 			// key는 있지만 value는 없는 경우, value로 설정
+			else if (!item->has_value())
+				item->set_value(_StringOpener(source, ++i));
 			else
-				item->set_value(_StringOpenerW(source, ++i));
+				DYNAMIC_ASSERT(false, "json parse failed! check json file");
 
 			break;
 		}
 
 		//하위 아이템을 가지는 경우
-		case L'{':
+		case converter::elem('{'):
 		{
-			// key가 없는데 하위 아이템을 선언한 경우
-			if (item->_key.size() == 0 && close != L' ')
-				CRASH("");
+			item->set_type(JOType::SUBJSON);
 
-			auto childs = _Parse(item, L'{', source, ++i);
+			auto childs = _SealedParser(item, converter::elem('{'), source, ++i);
 			for (auto child : childs)
 			{
 				item->AddPair(child);
 			}
 
-			item->_value_type = JOType::SUBJSON;
 			break;
 		}
 		//리스트
-		case L'[':
+		case converter::elem('['):
 		{
-			if (item->_key.size() == 0)
-				CRASH("");
+			item->set_type(JOType::ARRAY);
 
-			auto childs = _Parse(item, L'[', source, ++i);
+			auto childs = _SealedParser(item, converter::elem('['), source, ++i);
 			for (auto child : childs)
-			{
 				item->AddList(child);
-			}
 
-			item->_value_type = JOType::ARRAY;
 			break;
 		}
 		// sep. 다음 원소로 넘어감
-		case L',':
+		case converter::elem(','):
 		{
-			if (item->_key.size() == 0)
-				CRASH("");
+			//키는 있는데 값이 없음
+			if (std::size(item->key()) > 0 && !item->has_value() &&
+				item->type() != JOType::ARRAY && item->type() != JOType::SUBJSON)
+			{
+				auto value = Rewind(source, i - 1);
+				if (std::size(value) == 0)
+					CRASH("");
 
-			auto value = RewindW(source, i - 1);
-			if (value == L"")
-				CRASH("");
+				item->set_value(value);
+			}
 
-			item->set_value(value);
-
-			item = J_MakeShared<JsonItemW>(parent);
+			item = J_MakeShared<_JsonItemType>(parent);
 			result.push_back(item);
 			continue;
 
@@ -406,11 +162,11 @@ std::vector<std::shared_ptr<JsonItemW>> JsonParserW::_Parse(const std::shared_pt
 		}
 
 		// 주석인지 여부 => json이 지원 안해도 난 지원할거야 ^^
-		case L'/':
+		case converter::elem('/'):
 		{
-			if (i != 0 && source[i - 1] == L'/')
+			if (i != 0 && source[i - 1] == converter::elem('/'))
 			{
-				while (i < source.size() - 1 && source[i] != L'\n')
+				while (i < source.size() - 1 && source[i] != converter::elem('\n'))
 				{
 					i++;
 				}
@@ -423,19 +179,226 @@ std::vector<std::shared_ptr<JsonItemW>> JsonParserW::_Parse(const std::shared_pt
 		}
 	}
 
-	// key가 존재하고, value가 없을경우
-	if (item->_key.size() > 0 && item->_has_value == false)
-	{
-		//모든 for문을 마쳤지만, 닫기지 않고, 값이 없는 경우.
+	if(indexer >= std::size(source))
+
+	// 아래 항목들이 여기까지 내려온 자체만으로 뭔가 좀 이상한 상태
+	if (item->type() == JOType::ARRAY || item->type() == JOType::SUBJSON)
 		DYNAMIC_ASSERT(false, "json parse failed! check json file");
 
-		auto value = RewindW(source, source.size() - 1);
-		if (value == L"")
-			CRASH("");
-
+	// 여기 아래로는 단순 key - value 
+	// key가 존재하고, value가 없을경우 닫는 '\"' 가 없음 => value가 string이 아닌 경우
+	if (std::size(item->key()) != 0 && item->has_value() == false)
+	{
+		auto value = Rewind(source, source.size() - 1);
+		if (std::size(value) == 0)
+		{
+			DYNAMIC_ASSERT(false, "json parse failed! check json file");
+			indexer = source.size();
+		}
+			
 		item->set_value(value);
 	}
 
-	indexer = source.size();
 	return result;
+}
+
+
+template<typename _StrType>
+struct json_stream_trait
+{
+	using istream_type = std::conditional_t<stdex::is_convertible_ctype_char_v<_StrType>, std::ifstream, std::wifstream>;
+	using osteram_type = std::conditional_t<stdex::is_convertible_ctype_char_v<_StrType>, std::ofstream, std::wofstream>;
+
+	static constexpr istream_type open_istream(const _StrType& source_file, const int& io_type, const stdex::cvt::Encode& type)
+	{
+		istream_type stream;
+		
+		if constexpr (stdex::is_same_v<istream_type, std::wifstream>)
+		{
+			stream.open(source_file, io_type);
+			stdex::imbue(stream, type);
+		}
+		else
+		{
+			stream.open(source_file);
+		}
+
+		return stream;
+	}
+
+	static constexpr osteram_type open_ostream(const _StrType& source_file, const int& io_type, const stdex::cvt::Encode& type)
+	{
+		osteram_type stream;
+
+		if constexpr (stdex::is_same_v<osteram_type, std::wofstream>)
+		{
+			stream.open(source_file, io_type);
+			stdex::imbue(stream, type);
+		}
+		else
+		{
+			stream.open(source_file);
+		}
+
+		return stream;
+	}
+
+	static constexpr void close(istream_type& stream) { stream.close(); }
+	static constexpr void close(osteram_type& stream) { stream.close(); }
+};
+
+template<typename _JsonItemType, typename _StrType>
+std::shared_ptr<_JsonItemType> SealedParser(const _StrType& source_file, const int& io_type = 0, const stdex::cvt::Encode& type = stdex::cvt::Encode::None)
+{
+	static_assert(stdex::is_same_v<_JsonItemType, JsonItem> || stdex::is_same_v<_JsonItemType, JsonItemW>, "invalid json item type!");
+	static_assert(stdex::is_same_v<typename _JsonItemType::string_type, _StrType>, "string type mismatch");
+
+	auto reader = json_stream_trait<typename _JsonItemType::string_type>::open_istream(source_file, io_type, type);
+
+	typename _JsonItemType::string_type line_buffer;
+	typename _JsonItemType::string_type json_string;
+	while (std::getline(reader, line_buffer))
+	{
+		json_string += line_buffer + stdex::str_elem<typename _JsonItemType::string_type>::elem('\n');
+	}
+
+	auto head = J_MakeShared<_JsonItemType>(nullptr);
+	//head->set_type(JOType::HEADER);
+
+	int32 index = 0;
+	auto result = _SealedParser(head, stdex::str_elem<typename _JsonItemType::string_type>::elem(' '), json_string, index);
+	if (result.size() == 1)
+	{
+		head = result[0];
+	}
+	else
+	{
+		for (auto item : result)
+		{
+			head->AddPair(item);
+		}
+	}
+
+	json_stream_trait<typename _JsonItemType::string_type>::close(reader);
+	//auto test = (*head)["default_selling_price"];
+	return head;
+}
+
+
+std::shared_ptr<JsonItem> JsonParser::Parse(const std::string& source_file, const int& io_type, const stdex::cvt::Encode& type)
+{
+	return SealedParser<JsonItem>(source_file, io_type, type);
+}
+
+std::shared_ptr<JsonItemW> JsonParserW::Parse(const std::wstring& source_file, const int& io_type, const stdex::cvt::Encode& type)
+{
+	return SealedParser<JsonItemW>(source_file, io_type, type);
+}
+
+template<typename _StrType, typename _JsonItemType>
+_StrType _SealedToString(_JsonItemType& item, const int32& tcount)
+{
+	_StrType tab;
+	for (int32 i = 0; i < tcount; i++)
+		tab += stdex::str_elem<_StrType>::elem('\t');
+
+
+	_StrType key_string;
+	if (std::size(item->key()) > 0)
+		key_string = stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("\"%s\" : "), item->key());
+
+	switch(item->type())
+	{
+	case JOType::STRING:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s\"%s\""), tab, key_string, item->GetString());
+	case JOType::WSTRING:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s\"%s\""), tab, key_string, item->GetWstring());
+	case JOType::INTEGER:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s%s"), tab, key_string, std::to_string(item->GetInt32()));
+	case JOType::LONGLONG:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s%s"), tab, key_string, std::to_string(item->GetInt64()));
+	case JOType::FLOAT:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s%s"), tab, key_string, std::to_string(item->GetFloat()));
+	case JOType::DOUBLE:
+		return stdex::sprintf_buffer(stdex::str_elem<_StrType>::ascii("%s%s%s"), tab, key_string, std::to_string(item->GetDouble()));
+	case JOType::SUBJSON:
+	{
+		_StrType result_sub;
+		for (auto& itr : item->child_view().view())
+		{
+			if (std::size(result_sub) > 0)
+				result_sub += stdex::str_elem< _StrType>::ascii(",\n");
+
+			result_sub += _SealedToString<_StrType>(itr.second, tcount + 1);
+		}
+
+		return stdex::sprintf_buffer(stdex::str_elem< _StrType>::ascii("%s%s{\n%s\n%s}"), tab, key_string, result_sub, tab);
+	}
+	case JOType::ARRAY:
+	{
+		_StrType result_arr;
+		for (auto& itr : item->list_view().view())
+		{
+			if (std::size(result_arr) > 0)
+				result_arr += stdex::str_elem< _StrType>::ascii(",\n");
+
+			result_arr += _SealedToString<_StrType>(itr, tcount + 1);
+		}
+
+		return stdex::sprintf_buffer(stdex::str_elem< _StrType>::ascii("%s%s[\n%s\n%s]"), tab, key_string, result_arr, tab);
+	}
+	}
+}
+
+template<typename _StrType, typename _JsonItemType>
+_StrType SealedToString(_JsonItemType& item)
+{
+	return _SealedToString<_StrType>(item, 0);
+}
+
+std::string JsonParser::to_string(std::shared_ptr<JsonItem>& header)
+{
+	return SealedToString<std::string>(header);
+}
+
+std::wstring JsonParserW::to_string(std::shared_ptr<JsonItemW>& header)
+{
+	return SealedToString<std::wstring>(header);
+}
+
+template<typename _StrType>
+bool SealedWrite(const _StrType& target_path, const _StrType& raw_string, const int& io_type, const stdex::cvt::Encode& type)
+{
+	auto writer = json_stream_trait<_StrType>::open_ostream(target_path, io_type, type);
+	if (!writer.is_open())
+		return false;
+
+	writer << raw_string;
+	//writer.write(stdex::sprintf_traits<_StrType>::safe_type(raw_string), std::size(raw_string));
+	writer.close();
+	return true;
+}
+
+
+bool JsonParser::Write(const std::string& target_path, std::shared_ptr<JsonItem>& header, const int& io_type, const stdex::cvt::Encode& type)
+{
+	if (!SealedWrite(target_path, to_string(header), io_type, type))
+	{
+		DYNAMIC_ASSERT(false, "json file write failed! path: %s", target_path)
+		return false;
+	}
+		
+
+	return true;
+}
+
+bool JsonParserW::Write(const std::wstring& target_path, std::shared_ptr<JsonItemW>& header, const int& io_type, const stdex::cvt::Encode& type)
+{
+	if (!SealedWrite(target_path, to_string(header), io_type, type))
+	{
+		DYNAMIC_ASSERT(false, "json file write failed! path: %s", target_path)
+			return false;
+	}
+
+	return true;
 }

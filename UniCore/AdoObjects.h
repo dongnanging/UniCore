@@ -135,6 +135,7 @@ public:
     auto empty() { return !_record ||  _record->EndOfFile; }
     bool next_record();
     bool move_first();
+    bool move_next();
 
 
     template <typename _Cast>
@@ -372,9 +373,9 @@ public:
             _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adInteger, sizeof(_Ty));
         else if constexpr (std::is_same_v<stdex::pure_type_t<_Ty>, int64> )
             _set_parameter(std::forward<_Ty>(value), ParameterDirectionEnum::adParamInput, DataTypeEnum::adBigInt, sizeof(_Ty));
-        else if constexpr (stdex::is_cstr_v<_Ty>)
+        else if constexpr (stdex::is_convertible_ctype_char_v<_Ty>)
             _set_parameter(stdex::ctype_traits<_Ty>::ctype(std::forward<_Ty>(value)), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarChar, -1);
-        else if constexpr (stdex::is_wcstr_v<_Ty>)
+        else if constexpr (stdex::is_convertible_ctype_wchar_v<_Ty>)
             _set_parameter(stdex::ctype_traits<_Ty>::ctype(std::forward<_Ty>(value)), ParameterDirectionEnum::adParamInput, DataTypeEnum::adVarWChar, -1);
         else
         {
@@ -384,8 +385,8 @@ public:
                 std::is_same_v<stdex::pure_type_t<_Ty>, int16> ||
                 std::is_same_v<stdex::pure_type_t<_Ty>, int32> ||
                 std::is_same_v<stdex::pure_type_t<_Ty>, int64> ||
-                stdex::is_cstr_v<_Ty> ||
-                stdex::is_wcstr_v<_Ty>
+                stdex::is_convertible_ctype_char_v<_Ty> ||
+                stdex::is_convertible_ctype_wchar_v<_Ty>
                 , "invalid input paramter");
         }
 

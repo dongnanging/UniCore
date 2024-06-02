@@ -1,4 +1,5 @@
 #pragma once
+#include <cwctype>	//std::iswdigit
 
 namespace stdex
 {
@@ -179,15 +180,61 @@ namespace stdex
 	template<typename _Left, typename _Right>
 	static constexpr bool is_same_v = is_same<_Left, _Right>::value;
 
+	template<typename _Ty>
+	struct is_array
+	{
+		static constexpr bool value = std::is_array_v<stdex::pure_type_t<_Ty>>;
+	};
+
+	template<typename _Ty>
+	static constexpr bool is_array_v = is_array<_Ty>::value;
+
+
+	// =================================
+	// shared traits
+	// =================================
+	template<typename _Ty>
+	struct unwrap_shared
+	{
+		using type = _Ty;
+	};
+
+	template<typename _Ty>
+	struct unwrap_shared<std::shared_ptr<_Ty>>
+	{
+		using type = typename stdex::unwrap_shared<_Ty>::type;
+	};
+
+	template<typename _Ty>
+	using unwrap_shared_t = typename stdex::unwrap_shared<_Ty>::type;
+
 	// =================================
 	// ctype
 	// =================================
+
+	template<typename _Ty>
+	struct is_convertible_char
+	{
+		static constexpr bool value = _and_v<std::is_array<stdex::pure_type_t<_Ty>>, std::is_convertible<stdex::pure_type_t<_Ty>, const char*>>;
+	};
+
+	template<typename _Ty>
+	struct is_convertible_wchar
+	{
+		static constexpr bool value = _and_v<std::is_array<stdex::pure_type_t<_Ty>>, std::is_convertible<stdex::pure_type_t<_Ty>, const wchar_t*>>;
+	};
+
+	template<typename _Ty>
+	static constexpr bool is_convertible_ccptr_v = is_convertible_char<_Ty>::value;
+	template<typename _Ty>
+	static constexpr bool is_convertible_wccptr_v = is_convertible_wchar<_Ty>::value;
+
 	template<typename _Ty>
 	struct is_char_str
 	{
 		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	std::is_same_v<pure_t, char*> ||
-										_and_v<std::is_array<pure_t>, std::is_convertible<pure_t, const char*>>;
+										is_convertible_ccptr_v<pure_t>;
 	};
 
 	template<typename _Ty>
@@ -195,7 +242,7 @@ namespace stdex
 	{
 		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	std::is_same_v<pure_t, wchar_t*> ||
-										_and_v<std::is_array<pure_t>, std::is_convertible<pure_t, const wchar_t*>>;
+										is_convertible_wccptr_v<pure_t>;
 	};
 
 	template<typename _Ty>
@@ -230,7 +277,7 @@ namespace stdex
 
 
 	template<typename _Ty>
-	struct is_cstr
+	struct is_convertible_ctype_char
 	{
 		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	is_char_str_v<pure_t>		||
@@ -238,7 +285,7 @@ namespace stdex
 	};
 
 	template<typename _Ty>
-	struct is_wcstr
+	struct is_convertible_ctype_wchar
 	{
 		using pure_t = typename pure_type_t<_Ty>;
 		static constexpr bool value =	is_wchar_str_v<pure_t>		||
@@ -246,10 +293,10 @@ namespace stdex
 	};
 
 	template<typename _Ty>
-	static constexpr bool is_cstr_v = is_cstr<_Ty>::value;
+	static constexpr bool is_convertible_ctype_char_v = is_convertible_ctype_char<_Ty>::value;
 
 	template<typename _Ty>
-	static constexpr bool is_wcstr_v = is_wcstr<_Ty>::value;
+	static constexpr bool is_convertible_ctype_wchar_v = is_convertible_ctype_wchar<_Ty>::value;
 
 	template<typename _Left, typename _Right>
 	struct enable_same : std::enable_if<std::is_same_v<stdex::pure_type_t<_Left>, stdex::pure_type_t<_Right>>> {};
@@ -267,7 +314,7 @@ namespace stdex
 					typename = enable_same_t<_Ty, pure_t>,
 					typename = std::enable_if_t<is_stl_string_v<pure_t>>
 		>
-		static inline decltype(auto) ctype(_Ty&& item)
+		static constexpr decltype(auto) ctype(_Ty&& item)
 		{
 			return item.c_str();		// const char* / const wchar_t*
 		}
@@ -276,7 +323,7 @@ namespace stdex
 		template<	typename _Ty, 
 					typename = enable_same_t<_Ty, pure_t>
 		>
-		static inline std::enable_if_t<is_char_str_v<_Ty>,
+		static constexpr std::enable_if_t<is_char_str_v<_Ty>,
 			const char*> ctype(_Ty&& item)
 		{
 			return item;
@@ -285,7 +332,7 @@ namespace stdex
 		template<	typename _Ty,
 					typename = enable_same_t<_Ty, pure_t>
 		>
-		static inline std::enable_if_t<is_wchar_str_v<_Ty>,
+		static constexpr std::enable_if_t<is_wchar_str_v<_Ty>,
 			const wchar_t*> ctype(_Ty&& item)
 		{
 			return item;
@@ -296,7 +343,7 @@ namespace stdex
 					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
 					typename = std::enable_if_t<std::is_fundamental_v<pure_t>>
 			>
-	    static inline _Ty ctype(_Ty&& item)
+	    static constexpr _Ty ctype(_Ty&& item)
 		{
 			return item;
 		}
@@ -306,7 +353,7 @@ namespace stdex
 					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	문자열 아님
 					typename = std::enable_if_t<std::is_pointer_v<pure_t>>
 			>
-		static inline decltype(auto) ctype(_Ty&& item)
+		static constexpr decltype(auto) ctype(_Ty&& item)
 		{
 			// recursive
 
@@ -342,12 +389,73 @@ namespace stdex
 			return reinterpret_cast<std::uintptr_t>(item);
 		}
 	};
+
+
+	// =================================
+	// iterator traits
+	// =================================
+	template<typename _Ty>
+	struct pointer_iterator
+	{
+	private:
+		_Ty* _ptr;
+
+	public:
+		pointer_iterator(_Ty* ptr)
+			: _ptr(ptr)
+		{}
+
+		pointer_iterator& operator++() { _ptr++; return *this; }
+		_Ty& operator*() const { return *_ptr; }
+		_Ty* operator->() const { return *_ptr; }
+		bool operator!=(const pointer_iterator& other) const noexcept { return _ptr != other._ptr; }
+		bool operator==(const pointer_iterator& other) const noexcept { return _ptr == other._ptr; }
+	};
+
+	template<typename _Ty>
+	struct pointer_const_iterator
+	{
+	private:
+		_Ty* _ptr;
+
+	public:
+		pointer_const_iterator(_Ty* ptr)
+			: _ptr(ptr)
+		{}
+
+		const pointer_const_iterator& operator++() const { _ptr++; return *this; }
+		const _Ty& operator*() const { return *_ptr; }
+		const _Ty* operator->() const { return *_ptr; }
+		bool operator!=(const pointer_const_iterator& other) const { return _ptr != other._ptr; }
+		bool operator==(const pointer_const_iterator& other) const { return _ptr == other._ptr; }
+	};
+
+
+	//이러면 view에 넣을 수 잇다.
+	template<typename _Ty>
+	struct range_ptr
+	{
+	private:
+		using pure_t = stdex::pure_type_t<_Ty>;
+		_Ty* _ptr;
+		
+	public:
+		using iterator = pointer_iterator<_Ty>;
+		using const_iterator = pointer_const_iterator<_Ty>;
+		using iterator_category = std::forward_iterator_tag;	//일단 단방향
+
+		range_ptr(_Ty* ptr)
+			: _ptr(ptr)
+		{}
+
+		virtual iterator begin() const noexcept { return iterator(_ptr); }
+		virtual iterator end() const noexcept { return iterator(nullptr); }
+	};
+
 	
 	// =================================
 	// view
 	// =================================
-
-
 	struct view_base {};
 
 	template<typename _Ty>
@@ -390,12 +498,33 @@ namespace stdex
 	public:
 		virtual iterator begin() const noexcept { return _view_ptr->begin(); }
 		virtual iterator end() const noexcept { return _view_ptr->end(); }
-		virtual std::size_t size() const noexcept { return _view_ptr->size(); }
-		virtual bool empty() const noexcept { return _view_ptr->empty(); }
 	};
-	
+
+
 	template<typename _Ty>
-	stdex::view(_Ty) -> stdex::view<_Ty>;
+	struct view<_Ty*> : public std::conditional_t<has_reverse_iterator_v<_Ty>, reverse_view_types<_Ty>, forward_view_types<_Ty>>
+	{
+	protected:
+		using pure_t = stdex::pure_type_t<_Ty>;
+		mutable range_ptr<_Ty> _view_ptr;
+
+	public:
+		//이거 정의해 둬야 view에 view 넣기 가능
+		using iterator = typename range_ptr<_Ty>::iterator;
+		using const_iterator = typename range_ptr<_Ty>::const_iterator;
+		using iterator_category = typename range_ptr<_Ty>::iterator_category;
+
+		using iterator_type = iterator;
+
+	public:
+		view(_Ty* pointer)
+			: _view_ptr(pointer)
+		{}
+
+	public:
+		virtual iterator begin() const noexcept { return _view_ptr.begin(); }
+		virtual iterator end() const noexcept { return _view_ptr.end(); }
+	};
 
 	                                             
 	template<	typename _Ty>
@@ -427,8 +556,6 @@ namespace stdex
 	public:
 		virtual reverse_iterator begin() const noexcept { return reverse_iterator(_view_ptr->end()); }
 		virtual reverse_iterator end() const noexcept { return reverse_iterator(_view_ptr->begin()); }
-		virtual std::size_t size() const noexcept { return _view_ptr->size(); }
-		virtual bool empty() const noexcept { return _view_ptr->empty(); }
 	};
 
 	template<typename _Ty>
@@ -483,8 +610,6 @@ namespace stdex
 
 		virtual typename _View::iterator_type begin() const noexcept override { if (!_shared) return _View::iterator_type(); return _View::begin(); }
 		virtual typename _View::iterator_type end() const noexcept override { if (!_shared) return _View::iterator_type(); return _View::end(); }
-		virtual std::size_t size() const noexcept override { if (!_shared) return 0; return _View::size(); }
-		virtual bool empty() const noexcept override { if (!_shared) return true; return _View::empty(); }
 	};
 
 	template<typename _Ty, typename _Shared>
@@ -675,6 +800,49 @@ namespace stdex
 	};
 
 	// =================================
+	// character traits
+	// =================================
+	template<typename _StrType>
+	struct str_elem
+	{
+		template<typename = std::enable_if_t<stdex::is_convertible_ctype_char_v<_StrType>>>
+		static constexpr const char elem(const char ch)
+		{
+			return ch;
+		}
+
+		template<typename = std::enable_if_t<stdex::is_convertible_ctype_wchar_v<_StrType>>>
+		static constexpr const wchar_t elem(const char ch)
+		{
+			return static_cast<wchar_t>(ch);
+		}
+
+		//요점은 iterator가 있는가?
+		template<typename _StrOther>
+		static constexpr _StrType ascii(_StrOther&& other)
+		{
+			static_assert(stdex::is_string_v<_StrType> &&
+				stdex::is_string_v<_StrOther>,
+				"invalid string type!");
+
+			auto ctype = stdex::ctype_traits<_StrOther>::ctype(std::forward<_StrOther>(other));
+			stdex::view<decltype(ctype)> v(ctype);
+				
+			_StrType result;
+			for (auto itr : v)
+			{
+				if (itr == str_elem<decltype(ctype)>::elem('\0'))
+					break;
+
+				result += str_elem<_StrType>::elem(itr);
+			}
+
+
+			return result;
+		}
+	};
+
+	// =================================
 	// func traits
 	// =================================
 	
@@ -722,45 +890,53 @@ namespace stdex
 	// =================================
 	// func
 	// =================================
-	template<typename... _Args>
-	static inline void snprintf(std::string& buffer, const char* format, _Args&&... args)
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<stdex::is_convertible_ctype_char_v<_Format>>>
+	static inline void sprintf(std::string& buffer, _Format&& format, _Args&&... args)
 	{
-		auto size = snprintf(nullptr, 0, format, std::forward<_Args>(args)...);
+		//static_assert(stdex::is_convertible_ctype_char_v<_Format>, "invalid format string! valid format: std::string, const char*, char(&)[]");
+
+		auto size = snprintf(nullptr, 0, ctype_traits<_Format>::ctype(std::forward<_Format>(format)), ctype_traits<_Args>::ctype(std::forward<_Args>(args))...);
 
 		// 쓸때 무조건 '\0' 까지 씀. 만약 자리가 부족하면 마지막 문자열 제거하고 \0이 들어가버림
 		size++;
 		buffer.resize(size);
-		snprintf(&buffer[0], size, format, ctype_traits<_Args>::ctype(std::forward<_Args>(args))...);
+		snprintf(&buffer[0], size, ctype_traits<_Format>::ctype(std::forward<_Format>(format)), ctype_traits<_Args>::ctype(std::forward<_Args>(args))...);
 
 		buffer.pop_back();	// \0제거
 	}
 
-	template<typename... _Args>
-	static inline std::string snprintf_buffer(const char* format, _Args&&... args)
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<stdex::is_convertible_ctype_char_v<_Format>>>
+	static inline std::string sprintf_buffer(_Format&& format, _Args&&... args)
 	{
+		//static_assert(stdex::is_convertible_ctype_char_v<_Format>, "invalid format string! valid format: std::string, const char*, char(&)[]");
+
 		std::string buffer;
-		stdex::snprintf(buffer, format, std::forward<_Args>(args)...);
+		stdex::sprintf(buffer, std::forward<_Format>(format), std::forward<_Args>(args)...);
 		return buffer;
 	}
 
-	template<typename... _Args>
-	static inline void snprintf(std::wstring& buffer, const wchar_t* format, _Args&&... args)
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<stdex::is_convertible_ctype_wchar_v<_Format>>>
+	static inline void sprintf(std::wstring& buffer, _Format&& format, _Args&&... args)
 	{
-		auto size = swprintf(nullptr, 0, format, std::forward<_Args>(args)...);
+		//static_assert(stdex::is_convertible_ctype_wchar_v<_Format>, "invalid format string! valid format: std::wstring, const wchar_t*, wchar_t(&)[]");
+
+		auto size = swprintf(nullptr, 0, ctype_traits<_Format>::ctype(std::forward<_Format>(format)), ctype_traits<_Args>::ctype(std::forward<_Args>(args))...);
 
 		// 쓸때 무조건 '\0' 까지 씀. 만약 자리가 부족하면 마지막 문자열 제거하고 \0이 들어가버림
 		size++;
 		buffer.resize(size);
-		swprintf(&buffer[0], size, format, std::forward<_Args>(args)...);
+		swprintf(&buffer[0], size, ctype_traits<_Format>::ctype(std::forward<_Format>(format)), ctype_traits<_Args>::ctype(std::forward<_Args>(args))...);
 
 		buffer.pop_back(); // \0 제거
 	}
 
-	template<typename... _Args>
-	static inline std::wstring snprintf_buffer(const wchar_t* format, _Args&&... args)
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<stdex::is_convertible_ctype_wchar_v<_Format>>>
+	static inline std::wstring sprintf_buffer(_Format&& format, _Args&&... args)
 	{
+		//static_assert(stdex::is_convertible_ctype_wchar_v<_Format>, "invalid format string! valid format: std::wstring, const wchar_t*, wchar_t(&)[]");
+
 		std::wstring buffer;
-		stdex::snprintf(buffer, format, std::forward<_Args>(args)...);
+		stdex::sprintf(buffer, std::forward<_Format>(format), std::forward<_Args>(args)...);
 		return buffer;
 	}
 
@@ -830,6 +1006,23 @@ namespace stdex
 		ltrim(s, t);
 	}
 
+	static constexpr void ltrim(std::string& s, const char* t = " \t\n\r\f\v")
+	{
+		s.erase(0, s.find_first_not_of(t));
+	}
+	// trim from right 
+	static constexpr void rtrim(std::string& s, const char* t = " \t\n\r\f\v")
+	{
+		s.erase(s.find_last_not_of(t) + 1);
+	}
+	// trim from left & right 
+	static constexpr void trim(std::string& s, const char* t = " \t\n\r\f\v")
+	{
+		rtrim(s, t);
+		ltrim(s, t);
+	}
+
+
 	static constexpr void reverse(std::string& str)
 	{
 		std::reverse(str.begin(), str.end());
@@ -837,6 +1030,20 @@ namespace stdex
 	static constexpr void reverse(std::wstring& str)
 	{
 		std::reverse(str.begin(), str.end());
+	}
+
+	template<typename _CharType>
+	static constexpr bool isdigit(_CharType&& character)
+	{
+		if constexpr (stdex::is_same_v<_CharType, char>)
+			return std::isdigit(std::forward<_CharType>(character));
+		else if constexpr (stdex::is_same_v<_CharType, wchar_t>)
+			return std::iswdigit(std::forward<_CharType>(character));
+		else
+		{
+			static_assert(stdex::is_same_v<_CharType, char> || stdex::is_same_v<_CharType, wchar_t>, "invalid character type");
+			return false;
+		}
 	}
 
 	std::vector<std::wstring> split(std::wstring str, wchar_t delimiter);

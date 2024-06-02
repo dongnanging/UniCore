@@ -68,25 +68,51 @@
 #else
 #define file_log_dest
 #endif
-template <typename _Ty> concept is_character = stdex::is_cstr_v<_Ty>;
-template <typename _Ty> concept is_wide_character = stdex::is_wcstr_v<_Ty>;
+template <typename _Ty> concept is_character = stdex::is_convertible_ctype_char_v<_Ty>;
+template <typename _Ty> concept is_wide_character = stdex::is_convertible_ctype_wchar_v<_Ty>;
 
 struct variadic_format_string
 {
-	template<typename _Format, typename... _Args>
+	//모든 항목이 wchar_t 가 아니고, format이 const char* 으로 변환 가능
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<!stdex::_or_v<stdex::is_convertible_ctype_wchar<_Args>...>>>
 	requires is_character<_Format>
 	static inline void format_print(_Format&& form_str, _Args&&... args)
 	{
-		std::fprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
-		std::fprintf(file_log_dest, "\n");
+		try
+		{
+			std::fprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+			std::fprintf(file_log_dest, "\n");
+		}
+		catch (...)
+		{
+			
+		}
 	}
 
-	template<typename _Format, typename... _Args>
-	requires is_wide_character<_Format>
+	// 하나라도 wchar_t 가 있음
+	template<typename _Format, typename... _Args, typename = std::enable_if_t<stdex::_or_v<stdex::is_convertible_ctype_wchar<_Args>...>>>
 	static inline void format_print(_Format&& form_str, _Args&&... args)
 	{
-		std::fwprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
-		std::fwprintf(file_log_dest, L"\n");
+		try
+		{
+			auto format_string = stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str));
+
+			//const wchar_t* 가 아니라 const char* 이면
+			if constexpr (stdex::is_convertible_ctype_char_v<decltype(format_string)>)
+			{
+				auto wide_format_string = stdex::ctype_traits<std::wstring>::ctype(stdex::str_elem<std::wstring>::ascii(format_string));
+				std::fwprintf(file_log_dest, wide_format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+			}	
+			else
+				std::fwprintf(file_log_dest, format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+
+			
+			std::fwprintf(file_log_dest, L"\n");
+		}
+		catch (...)
+		{
+
+		}
 	}
 };
 
