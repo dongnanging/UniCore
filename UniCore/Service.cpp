@@ -8,7 +8,7 @@
 void ServiceBase::_anchor()
 {
 	GetCore()->run();
-	GlobalHandler.threadManager->EnqueueJob(
+	ThreadManager::GetInstnace()->EnqueueJob(
 		[this]() { _anchor(); },
 		shared_from_this()
 	);
@@ -18,7 +18,7 @@ void ServiceBase::AnchoringService(int32 serviceCount)
 {
 	for (int32 i = 0; i < serviceCount; i++)
 	{
-		GlobalHandler.threadManager->EnqueueJob(
+		ThreadManager::GetInstnace()->EnqueueJob(
 			[this]() { _anchor();  },
 			shared_from_this()
 		);
@@ -32,7 +32,7 @@ Service::Service(Enum_ServiceType serviceType, std::function<std::shared_ptr<Ses
 	if (service)
 		_service = service;
 	else
-		_service = J_MakeShared<boost::asio::io_service>();
+		_service = stdex::pmake_shared<boost::asio::io_service>();
 
 	if (sessionFactory != nullptr)
 	{
@@ -116,7 +116,7 @@ void ServerService::_StartAccept(int32 acceptorCount, int32 listenCount)
 
 				try
 				{
-					acceptor = J_MakeShared<tcp::acceptor>(
+					acceptor = stdex::pmake_shared<tcp::acceptor>(
 						*_service.get(),
 						boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), randNum));
 
@@ -131,7 +131,7 @@ void ServerService::_StartAccept(int32 acceptorCount, int32 listenCount)
 		}
 		else
 		{
-			acceptor = J_MakeShared<tcp::acceptor>(
+			acceptor = stdex::pmake_shared<tcp::acceptor>(
 				*_service.get(),
 				boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::any(), _openPort));
 		}

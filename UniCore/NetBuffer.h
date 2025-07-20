@@ -9,9 +9,19 @@ enum Enum_NetBufferFlags
 
 class NetBuffer : objpool::NoPlacemnetNew
 {
+protected:
+	stdex::vector<BYTE> _buffer;
+
+	using size_type = typename decltype(_buffer)::size_type;
+
+	size_type _readPos = 0;
+	size_type _writePos = 0;
 public:
 	NetBuffer();
-	NetBuffer(int32 bufferSize);
+	NetBuffer(size_type bufferSize);
+
+	void Init(size_type bufferSize = Enum_NetBufferFlags::BUFFER_SIZE_DEFAULT);
+	void Destroy();
 
 public:
 	/*Buffer Control*/
@@ -23,19 +33,14 @@ public:
 	void CleanPosPointers_Strong();
 	void CleanPosPointers_Weak();
 
-	virtual bool OnRead(int32 numOfBytes);
-	virtual bool OnWrite(int32 numOfBytes);
+	virtual bool OnRead(size_type numOfBytes);
+	virtual bool OnWrite(size_type numOfBytes);
 
 	BYTE* ReadPos() { return &_buffer[_readPos]; }
 	BYTE* WritePos() { return &_buffer[_writePos]; }
-	int32 DataSize() { return _writePos - _readPos; }
-	int32 FreeSize() { return _buffer.size() - _writePos; }
-	int32 Capacity() { return _buffer.size(); }
-
-protected:
-	int32 _readPos = 0;
-	int32 _writePos = 0;
-	stdex::vector<BYTE> _buffer;
+	size_type DataSize() { return _writePos - _readPos; }
+	size_type FreeSize() { return _buffer.size() - _writePos; }
+	size_type Capacity() { return _buffer.size(); }
 };
 
 
@@ -91,6 +96,7 @@ class SendBuffer
 {
 public:
 	SendBuffer();
+	SendBuffer(std::size_t size);
 
 public:
 	/// <summary>
@@ -104,8 +110,8 @@ public:
 	BYTE* Get() { return _buffer->WritePos(); }
 	bool Write(int32 writeSize) { return _buffer->OnWrite(writeSize); }
 
-	int32 FreeSize() { return _buffer->FreeSize(); }
-	int32 Capacity() { return _buffer->Capacity(); }
+	const auto FreeSize() { return _buffer->FreeSize(); }
+	const auto Capacity() { return _buffer->Capacity(); }
 
 private:
 	std::shared_ptr<NetBuffer> _buffer;

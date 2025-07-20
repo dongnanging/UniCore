@@ -81,32 +81,32 @@ protected:
 	{
 		if constexpr (stdex::is_convertible_ctype_char_v<stdex::pure_type_t<_Value>>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<std::string>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<std::string>(std::forward<_Value>(val)));
 			_value_type = JOType::STRING;
 		}
 		else if constexpr (stdex::is_convertible_ctype_wchar_v<stdex::pure_type_t<_Value>>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<std::wstring>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<std::wstring>(std::forward<_Value>(val)));
 			_value_type = JOType::WSTRING;
 		}
 		else if constexpr (stdex::is_same_v<int32, _Value>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<int32>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<int32>(std::forward<_Value>(val)));
 			_value_type = JOType::INTEGER;
 		}
 		else if constexpr (stdex::is_same_v<int64, _Value>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<int64>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<int64>(std::forward<_Value>(val)));
 			_value_type = JOType::LONGLONG;
 		}
 		else if constexpr (stdex::is_same_v<float, _Value>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<float>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<float>(std::forward<_Value>(val)));
 			_value_type = JOType::FLOAT;
 		}
 		else if constexpr (stdex::is_same_v<double, _Value>)
 		{
-			_value_item = std::static_pointer_cast<void>(J_MakeShared<double>(std::forward<_Value>(val)));
+			_value_item = std::static_pointer_cast<void>(stdex::pmake_shared<double>(std::forward<_Value>(val)));
 			_value_type = JOType::DOUBLE;
 		}
 		else
@@ -280,7 +280,8 @@ protected:
 using JsonItem = JsonDivision<std::string>;
 using JsonItemW = JsonDivision<std::wstring>;
 
-class JsonParser
+class 
+	JsonParser
 {
 public:
 	static std::shared_ptr<JsonItem> Parse(const std::string& source_file, const int& io_type = std::ios::binary, const stdex::cvt::Encode& type = stdex::cvt::Encode::None);
@@ -288,7 +289,8 @@ public:
 	static bool Write(const std::string& target_path, std::shared_ptr<JsonItem>& header, const int& io_type = std::ios::binary, const stdex::cvt::Encode& type = stdex::cvt::Encode::None);
 };
 
-class JsonParserW
+class 
+	JsonParserW
 {
 public:
 	static std::shared_ptr<JsonItemW> Parse(const std::wstring& source_file, const int& io_type = std::ios::binary, const stdex::cvt::Encode& type = stdex::cvt::Encode::UniCode);
@@ -306,7 +308,7 @@ public:
 	using json_parser = std::conditional_t< stdex::cvt::Encode::UniCode == _Encode, JsonParserW, JsonParser>;
 
 	using json_func_type = decltype(&json_parser::Parse);
-	using json_item_type = typename stdex::function_traits<json_func_type>::ret_type;
+	using json_item_type = typename stdex::function_traits<json_func_type>::return_type;
 
 	using string_type = typename stdex::pure_type_t<typename stdex::unwrap_shared_t<json_item_type>::string_type>;	//만약 shared_ptr로 감싸졌으면 풀어주기
 
@@ -353,6 +355,11 @@ public:
 	auto& header() { return _header; }
 
 
+#ifdef __BOOST_ASIO
+	int32 b_mac_test_v_ = 3;
+	const auto& is_b_mac() { return b_mac_test_v_; }
+#endif
+
 
 private:
 	json_item_type _header;
@@ -361,6 +368,13 @@ private:
 
 	std::atomic<bool> _is_open;
 };
+
+#ifdef __BOOST_ASIO
+class Dummyclass {
+public:
+	const char* hi_;
+};
+#endif
 
 using JsonFile = JsonFileBase<stdex::cvt::Encode::ASCII>;
 using JsonFileW = JsonFileBase<stdex::cvt::Encode::UniCode>;

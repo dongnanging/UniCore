@@ -191,6 +191,34 @@ namespace stdex
 
 
 	// =================================
+	// type extract
+	// =================================
+	struct type_extract_failed_type {};
+
+	struct type_extract_failed
+	{
+		typedef typename type_extract_failed_type type;
+	};
+
+	template<std::size_t _Index, typename _Head, typename... _Args>
+	struct _type_extract : _type_extract<_Index - 1, _Args...> {};
+
+	template<typename _Head, typename... _Args>
+	struct _type_extract<0, _Head, _Args...>
+	{
+		typedef typename _Head type;
+	};
+
+	template<std::size_t _Index, typename... _Args>
+	struct type_extract : std::conditional_t<(_Index <= sizeof...(_Args)), _type_extract<_Index, _Args...>, type_extract_failed> {};
+
+	template<std::size_t _Index, typename... _Args>
+	struct type_extract<_Index, std::tuple<_Args...>> : std::conditional_t<(_Index <= sizeof...(_Args)), _type_extract<_Index, _Args...>, type_extract_failed> {};
+
+	template<std::size_t _Index, typename... _Args>
+	using type_extract_t = typename type_extract<_Index, _Args...>::type;
+
+	// =================================
 	// shared traits
 	// =================================
 	template<typename _Ty>
@@ -348,17 +376,38 @@ namespace stdex
 			return item;
 		}
 
-		template<	typename _Ty, 
-					typename = enable_same_t<_Ty, pure_t>,
-					typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	¹®ÀÚ¿­ ¾Æ´Ô
-					typename = std::enable_if_t<std::is_pointer_v<pure_t>>
-			>
+		template<	typename _Ty,
+			typename = enable_same_t<_Ty, pure_t>,
+			typename = std::enable_if_t<_not_v<is_string<pure_t>>>,					//	¹®ÀÚ¿­ ¾Æ´Ô
+			typename = std::enable_if_t<std::is_enum_v<pure_t> && std::is_pointer_v<pure_t>>
+		>
 		static constexpr decltype(auto) ctype(_Ty&& item)
 		{
-			// recursive
+			if constexpr (std::is_pointer_v<pure_t>)
+			{
+				// recursive
 
-			// ²®Áú ±ñ´Ù~
-			return ctype_traits<_Ty>::ctype(*item);
+				// ²®Áú ±ñ´Ù~
+				return ctype_traits<_Ty>::ctype(*item);
+			}
+
+			if constexpr (sizeof(_Ty) == sizeof(uint8))
+				return static_cast<uint8>(item);
+			else if constexpr (sizeof(_Ty) == sizeof(uint16))
+				return static_cast<uint16>(item);
+			else if constexpr (sizeof(_Ty) == sizeof(uint32))
+				return static_cast<uint32>(item);
+			else if constexpr (sizeof(_Ty) == sizeof(uint64))
+				return static_cast<uint64>(item);
+			else
+			{
+				static_assert(	sizeof(_Ty) == sizeof(uint8) ||
+								sizeof(_Ty) == sizeof(uint16) ||
+								sizeof(_Ty) == sizeof(uint32) ||
+								sizeof(_Ty) == sizeof(uint64),
+					"invalid item type");
+				return _Ty{};
+			}
 		}
 	};
 
@@ -375,7 +424,7 @@ namespace stdex
 		>
 		static constexpr decltype(auto) safe_type(_Ty&& item)
 		{
-			return ctype_traits<_Type>::ctype(item);
+			return ctype_traits<_Type>::ctype(std::forward<_Ty>(item));
 		}
 
 
@@ -389,6 +438,18 @@ namespace stdex
 			return reinterpret_cast<std::uintptr_t>(item);
 		}
 	};
+
+	// =================================
+	// shared bool
+	// =================================
+	template<typename _Ty>
+	struct is_shared_ptr : std::false_type {};
+
+	template<typename _Ty>
+	struct is_shared_ptr<std::shared_ptr<_Ty>> : std::true_type {};
+
+	template<typename _Ty>
+	static constexpr bool is_shared_ptr_v = is_shared_ptr<_Ty>::value;
 
 
 	// =================================
@@ -799,6 +860,7 @@ namespace stdex
 		}
 	};
 
+
 	// =================================
 	// character traits
 	// =================================
@@ -854,38 +916,41 @@ namespace stdex
 	template<typename _Ret, typename... _Args>
 	struct function_traits<_Ret(*)(_Args...)>
 	{
-		using ret_type = _Ret;
+		using return_type = _Ret;
 		using params_type = std::tuple<_Args...>;
+		static constexpr std::size_t param_size = sizeof...(_Args);
 	};
 
 	// Function reference specialization
 	template<typename _Ret, typename... _Args>
 	struct function_traits<_Ret(&)(_Args...)>
 	{
-		using ret_type = _Ret;
+		using return_type = _Ret;
 		using params_type = std::tuple<_Args...>;
+		static constexpr std::size_t param_size = sizeof...(_Args);
 	};
 
 	// Member function pointer specialization => mutable lambda operator()
 	template<typename _Class, typename _Ret, typename... _Args>
 	struct function_traits<_Ret(_Class::*)(_Args...)>
 	{
-		using ret_type = _Ret;
+		using return_type = _Ret;
 		using params_type = std::tuple<_Args...>;
+		static constexpr std::size_t param_size = sizeof...(_Args);
 	};
 
 	// Const member function pointer specialization => lambda operator()
 	template<typename _Class, typename _Ret, typename... _Args>
 	struct function_traits<_Ret(_Class::*)(_Args...) const>
 	{
-		using ret_type = _Ret;
+		using return_type = _Ret;
 		using params_type = std::tuple<_Args...>;
+		static constexpr std::size_t param_size = sizeof...(_Args);
 	};
 
 	// type Deduction guide for lambda expressions
-	template<typename _Lambda>
+	template<typename _Lambda, typename = substitution_helper_t<decltype(&_Lambda::operator())>>
 	function_traits(_Lambda) -> function_traits<decltype(&_Lambda::operator())>;
-
 
 	// =================================
 	// func
@@ -985,6 +1050,24 @@ namespace stdex
 	}
 
 
+	// =================================
+	// singleton
+	// =================================
+	template<typename _Derive>
+	struct sigleton {
+		static _Derive* GetInstnace() {
+			static _Derive item;
+
+			return &item;
+		}
+
+		sigleton(const sigleton&) = delete;
+		sigleton& operator=(const sigleton&) = delete;
+
+	protected:
+		sigleton() = default;
+	};
+
 
 	// =================================
 	// utils
@@ -1046,6 +1129,35 @@ namespace stdex
 		}
 	}
 
-	std::vector<std::wstring> split(std::wstring str, wchar_t delimiter);
+	std::vector<std::wstring> split(const std::wstring& str, wchar_t delimiter = L',');
+	std::vector<std::string> split(const std::string& str, char delimiter = ',');
+	//template<typename _Ty>
+	//void split_to_vec(const std::string& str, OUT std::vector<_Ty>& out, char delimiter)
+	//{
+	//	auto sstr = split()
+	//}
+
 	bool make_directory(const wchar_t* directory_path);
+
+
+	template<typename _Ty, typename... _Args, typename = std::enable_if_t<std::is_constructible_v<_Ty, _Args...>>>
+	stdex::pure_type_t<_Ty>& mutable_static(_Args&&... args)
+	{
+		if constexpr (stdex::is_shared_ptr_v<stdex::pure_type_t<_Ty>>)
+		{
+			static stdex::pure_type_t<_Ty> item(std::forward<_Args>(args)...);
+			return item;
+		}
+		else
+		{
+			static stdex::pure_type_t<_Ty> item(std::forward<_Args>(args)...);
+			return item;
+		}
+	}
+
+	template<typename _Ty, typename... _Args, typename = std::enable_if_t<std::is_constructible_v<_Ty, _Args...>>>
+	const stdex::pure_type_t<_Ty>& make_static(_Args&&... args)
+	{
+		return mutable_static<_Ty>(std::forward<_Args>(args)...);
+	}
 }

@@ -10,8 +10,8 @@ public:
 
 public:
 	std::shared_ptr<DeadLockProfiler> deadLockProfiler;
-	std::shared_ptr<ThreadManager> threadManager;
-	std::shared_ptr<SendBufferSlicer> sendBufferSlicer;
+	// std::shared_ptr<ThreadManager> threadManager;
+	// std::shared_ptr<SendBufferSlicer> sendBufferSlicer;
 };
 
 extern CoreGlobal GlobalHandler;

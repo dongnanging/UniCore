@@ -39,13 +39,13 @@ void RWLock::ReadLock()
 void RWLock::ReadUnlock()
 {
 	//ReadLock에 성공한 후에 UnLock을 한다고 가정하고 무조건 제거만 해준다.
-	DYNAMIC_ASSERT(_lockFlag.fetch_sub(1) & READ_LOCK_MASK > 0, "Invaild Unlock")
+	DYNAMIC_ASSERT((_lockFlag.fetch_sub(1) & READ_LOCK_MASK) > 0, "Invaild Unlock")
 }
 
 void RWLock::WriteLock()
 {
 	//현재 WriteLock을 걸어둔 와중에, WriteLock을 시도
-	auto writeLockThreadID = (_lockFlag.load() & WRITE_LOCK_MASK) >> 16;
+	auto writeLockThreadID = ((_lockFlag.load() & WRITE_LOCK_MASK)) >> 16;
 	//근데 만약 WriteLock을 건 thread가 해당 Thread라면? 문제없이 WriteLock가능
 	if (TLS_ThreadID == writeLockThreadID)
 	{

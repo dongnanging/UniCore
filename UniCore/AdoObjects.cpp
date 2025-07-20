@@ -20,8 +20,9 @@ bool ado_result::next_record()
 
     try
     {
-        long lngRec = 0;
-        _record->NextRecordset(reinterpret_cast<VARIANT*>(lngRec));
+        VARIANT lngRec; lngRec.llVal = 0;
+
+        _record->NextRecordset(&lngRec);
     }
     catch (_com_error& e)
     {
@@ -132,7 +133,7 @@ void ado_conn_object::_close() noexcept
 
 
 SQL_SENDER::SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type)
-    : _query(static_cast<char*>(query_string))
+    : _query(static_cast<char*>(query_string)), _break(false)
 {
     if (FAILED(_comm.CreateInstance(__uuidof(Command))))
     {
@@ -141,7 +142,7 @@ SQL_SENDER::SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type)
         return;
     }
 
-    _result = J_MakeShared<ado_result>();
+    _result = stdex::pmake_shared<ado_result>();
     _comm->CommandText = query_string;
     _comm->CommandType = comm_type;
     if (_comm->CommandType == CommandTypeEnum::adCmdStoredProc)
@@ -150,6 +151,7 @@ SQL_SENDER::SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type)
         ret->_param->Type = adInteger;
         ret->_param->Size = sizeof(int);
         ret->_param->Direction = adParamReturnValue;
+        ret->_param->Value = _variant_t(-1);
 
         _comm->Parameters->Append(ret->_param);
 
@@ -159,8 +161,20 @@ SQL_SENDER::SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type)
 
 SQL_SENDER::~SQL_SENDER()
 {
-    _clear();
-
+    try
+    {
+        _clear();
+    }
+    catch (_com_error& e)
+    {
+        ADOErrorHandler::HandlerError(e);
+    }
+    catch (...)
+    {
+        //알 수 없는 오류
+        DYNAMIC_ASSERT(false, "Qeury Callback Error :: %s", query_string());
+    }
+    
     if (_comm)
         _comm = nullptr;
 
@@ -187,17 +201,34 @@ void SQL_SENDER::on_callback() noexcept
         DYNAMIC_ASSERT(false, "Qeury Callback Error :: %s", query_string());
     }
 
-    //자원 정리
-    _clear();
+    //자원 정리 => 소멸자에서 하는걸로 변경
+    //_clear();
 }
 
 void SQL_SENDER::execute(const ConnectOptionEnum& exec_type)
 {
-    _result->set_record(_comm->Execute(nullptr, nullptr, exec_type));
+    try
+    {
+        _result->set_record(_comm->Execute(nullptr, nullptr, exec_type));
+        return;
+    }
+    catch (_com_error& e)
+    {
+        ADOErrorHandler::HandlerError(e);
+    }
+    catch (...)
+    {
+        //알 수 없는 오류
+        DYNAMIC_ASSERT(false, "Qeury Callback Error :: [%s], Type :: [%d]", query_string(), static_cast<uint32>(exec_type));
+    }
+
+    _break = true;
 }
 
 void SQL_SENDER::_clear()
 {
+    _break = false;
+
     for (int i = _comm->Parameters->GetCount() - 1; i >= 0; i--)
         _comm->Parameters->Delete(_variant_t(static_cast<long>(i)));
 
@@ -211,5 +242,4 @@ void SQL_SENDER::_clear()
     }
 
     _comm->ActiveConnection = nullptr;
-    _result = J_MakeShared<ado_result>();
 }

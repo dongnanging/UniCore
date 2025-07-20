@@ -3,14 +3,14 @@
 
 void JobQueue::Push(const std::shared_ptr<ThreadJob>& job)
 {
-	int prev = _jobCount.fetch_add(1);
+	auto prev = _jobCount.fetch_add(1);
 
 	_concurrent_queue.enqueue(job);
 
 	//prev가 0이었다. => 시작을 안했거나 return으로 빠져나갔다.
 	//== 재등록을 해야한다.
 	if (prev == 0)
-		GlobalHandler.threadManager->EnqueueJob([this]() {_Execute(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() {_Execute(); }, shared_from_this());
 }
 
 void JobQueue::_Execute()
@@ -24,10 +24,10 @@ void JobQueue::_Execute()
 
 		_concurrent_queue.dequeue_all(jobs);
 
-		for (int32 i = 0; i < jobs.size(); i++)
+		for (decltype(jobs.size()) i = 0; i < jobs.size(); i++)
 			jobs[i]->Execute();
 
-		int prev = _jobCount.fetch_sub(jobs.size());
+		auto prev = _jobCount.fetch_sub(jobs.size());
 
 		if (prev == 0) return;
 
@@ -36,7 +36,7 @@ void JobQueue::_Execute()
 			continue;
 
 		//더이상 실행이 불가능하다. startTick <= GETTICKCOUNT64() => TickTime을 모두 소진했다.
-		GlobalHandler.threadManager->EnqueueJob([this]() {_Execute(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() {_Execute(); }, shared_from_this());
 		return;
 	}
 }

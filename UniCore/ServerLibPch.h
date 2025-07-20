@@ -30,6 +30,29 @@
 //#define custom_malloc(size) ::malloc(size)
 //#define custom_free(vptr) ::free(vptr)
 
+#include <csignal>
+#include <cstdlib>
+
+// 커스텀 terminate 핸들러 함수
+inline void customTerminateHandler() {
+    std::cerr << "Unhandled exception! Terminating program safely..." << std::endl;
+    std::exit(EXIT_FAILURE); // 비정상 종료를 피하기 위해 abort 대신 적절한 종료 방법 선택
+}
+
+// 시스템 신호 처리기 함수
+inline void signalHandler(int signal) {
+    std::cerr << "Received signal " << signal << ". Terminating program safely..." << std::endl;
+    std::exit(EXIT_FAILURE);
+}
+
+inline void _enroll_exception_handler() {
+    // 커스텀 terminate 핸들러를 설정
+    std::set_terminate(customTerminateHandler);
+    std::signal(SIGSEGV, signalHandler);
+    std::signal(SIGABRT, signalHandler);
+}
+
+
 #define __BOOST_ASIO
 #if defined(__BOOST_ASIO)	//Boost ASIO사용 => Linux, Window 크로스 가능
 #include <boost/asio.hpp>
@@ -53,11 +76,16 @@ using now_allocator = PoolAllocator<_Ty>;
 #include "ObjectPool.h"
 #include "Instantiator.h"
 
-#import "msado15.dll" no_namespace rename("EOF", "EndOfFile")
-
 #include "NetBuffer.h"
 #include "CoreGlobal.h"
 #include "CoreTLS.h"
+
+#if defined(__SQL_ODBC)
+#include "DBConnector.h"
+#elif defined(__SQL_ADO) || defined(__SQL_OLEDB)
+#import "msado15.dll" no_namespace rename("EOF", "EndOfFile")
+#include "ADODBCon.h"
+#endif
 
 #include "Service.h"
 #include "Session.h"
@@ -66,11 +94,7 @@ using now_allocator = PoolAllocator<_Ty>;
 #include "DataObjects.h"
 #include "OnOffFlags.h"
 
-#if defined(__SQL_ODBC)
-#include "DBConnector.h"
-#elif defined(__SQL_ADO) || defined(__SQL_OLEDB)
-#include "ADODBCon.h"
-#endif
+
 
 
 //class SQL_Sender

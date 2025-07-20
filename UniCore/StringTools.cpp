@@ -69,7 +69,7 @@ std::string StringTools::reverse(std::string& s)
 {
 	std::string result;
 
-	for (int32 i = s.size() - 1; i >= 0; i--)
+	for (auto i = s.size() - 1; i >= 0; i--)
 	{
 		result += s[i];
 	}

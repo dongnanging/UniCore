@@ -9,7 +9,7 @@ public:
 	//단순히 람다 캡쳐만으로 생존권을 보장할 수 있을 경우에만 사용
 
 	template<typename _Job_Func,
-		typename = std::enable_if_t<std::is_same_v<stdex::pure_type_t<_Job_Func>, thread_job_func>>>
+		typename = std::enable_if_t<std::is_same_v<stdex::pure_type_t<_Job_Func>, thread_job_func> || std::is_convertible_v<stdex::pure_type_t<_Job_Func>, thread_job_func>>>
 	ThreadJob(_Job_Func&& lambda)
 		: _callback(std::move(lambda))
 	{}

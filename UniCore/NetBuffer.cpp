@@ -9,14 +9,25 @@ NetBuffer::NetBuffer()
 	_buffer.resize(Enum_NetBufferFlags::BUFFER_SIZE_DEFAULT);
 }
 
-NetBuffer::NetBuffer(int32 bufferSize)
+NetBuffer::NetBuffer(size_type bufferSize)
 	: _buffer(bufferSize)
 {
 }
 
+void NetBuffer::Init(size_type bufferSize)
+{
+	_buffer.resize(bufferSize);
+}
+
+void NetBuffer::Destroy()
+{
+	_readPos = 0;
+	_writePos = 0;
+}
+
 void NetBuffer::CleanPosPointers_Strong()
 {
-	int32 _nowDataSize = DataSize();
+	auto _nowDataSize = DataSize();
 	if (_nowDataSize == 0)	//_readPos == _writePos
 	{
 		//우연히 둘다 겹치므로 바로 초기위치로 초기화
@@ -43,7 +54,7 @@ void NetBuffer::CleanPosPointers_Weak()
 	}
 }
 
-bool NetBuffer::OnRead(int32 numOfBytes)
+bool NetBuffer::OnRead(size_type numOfBytes)
 {
 	if (numOfBytes > DataSize())
 		return false;
@@ -53,7 +64,7 @@ bool NetBuffer::OnRead(int32 numOfBytes)
 	return true;
 }
 
-bool NetBuffer::OnWrite(int32 numOfBytes)
+bool NetBuffer::OnWrite(size_type numOfBytes)
 {
 	if (numOfBytes > _buffer.size())
 	{
@@ -84,7 +95,12 @@ bool NetBuffer::OnWrite(int32 numOfBytes)
 ===========================*/
 SendBuffer::SendBuffer()
 {
-	_buffer = J_MakeShared<NetBuffer>();
+	_buffer = stdex::pmake_shared<NetBuffer>();
+}
+
+SendBuffer::SendBuffer(std::size_t size)
+{
+	_buffer = stdex::pmake_shared<NetBuffer>(size);
 }
 
 
@@ -103,15 +119,15 @@ std::shared_ptr<SendData> SendBufferSlicer::Slice(int32 size)
 {
 	//Release Ref and get new one => 나중에 pool을 쓰던가 해서 수정
 	if (TLS_SendBuffer == nullptr || TLS_SendBuffer->FreeSize() < size)
-		TLS_SendBuffer = J_MakeShared<SendBuffer>();
-
-	//if (TLS_SendBuffer->Capacity() < size)
-	//{
-	//	DYNAMIC_ASSERT(TLS_SendBuffer->FreeSize() >= size, "wrong size alloc");
-	//	return nullptr;
-	//}
-
-	auto sendData = J_MakeShared<SendData>(TLS_SendBuffer->GetNetBuffer(), TLS_SendBuffer->Get(), size);
+	{
+		// todo log
+		if (size > Enum_NetBufferFlags::BUFFER_SIZE_DEFAULT)
+			TLS_SendBuffer = stdex::pmake_shared<SendBuffer>(size);
+		else
+			TLS_SendBuffer = stdex::pmake_shared<SendBuffer>();
+	}
+		
+	auto sendData = stdex::pmake_shared<SendData>(TLS_SendBuffer->GetNetBuffer(), TLS_SendBuffer->Get(), size);
 	if (TLS_SendBuffer->Write(size) == false)
 		return nullptr;
 

@@ -7,9 +7,9 @@
 Session::Session()
 	: _queued_send_count(0), _sid(0), _ip("unknown"), _port(0)
 {
-	_serializeQueue = J_MakeShared<JobQueue>();
+	_serializeQueue = stdex::pmake_shared<JobQueue>();
 #if defined(__SQL_ODBC)
-	_dbAccessor = J_MakeShared<DBQueue>();
+	_dbAccessor = stdex::pmake_shared<DBQueue>();
 #endif
 	_recvBuffer = ObjectPool<RecvBuffer>::PoolShared();
 	_recvBuffer->Clear();
@@ -19,7 +19,7 @@ void Session::AttachToService(std::shared_ptr<Service> from)
 {
 	AttachService(from);
 	
-	_socket = J_MakeShared<tcp::socket>(*from->GetCore().get());
+	_socket = stdex::pmake_shared<tcp::socket>(*from->GetCore().get());
 }
 
 void Session::AttachService(std::shared_ptr<Service> serivce)
@@ -34,7 +34,7 @@ void Session::Send(std::shared_ptr<SendData>& sdata)
 	auto prev = _queued_send_count.fetch_add(1);
 	//prev가 0이다? => send완료 후 sub결과가 0이었다 => 등록이 해제되었다 => 재등록해야한다.
 	if (prev == 0)
-		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
 }
 
 void Session::Send(std::shared_ptr<SendData>&& sdata)
@@ -44,7 +44,7 @@ void Session::Send(std::shared_ptr<SendData>&& sdata)
 	auto prev = _queued_send_count.fetch_add(1);
 	//prev가 0이다? => send완료 후 sub결과가 0이었다 => 등록이 해제되었다 => 재등록해야한다.
 	if (prev == 0)
-		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
 }
 
 void Session::Send(std::vector<std::shared_ptr<SendData>>& sdatas)
@@ -55,7 +55,7 @@ void Session::Send(std::vector<std::shared_ptr<SendData>>& sdatas)
 	auto prev = _queued_send_count.fetch_add(size);
 	//prev가 0이다? => send완료 후 sub결과가 0이었다 => 등록이 해제되었다 => 재등록해야한다.
 	if (prev == 0)
-		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
 }
 
 void Session::Connected()
@@ -91,6 +91,17 @@ void Session::Disconnect(std::string cause)
 			DYNAMIC_ASSERT(false, "Disconnect Failed!");
 		}
 		});
+}
+
+SQL_SENDER::sql_callback Session::shared_callback(session_db_callback&& callback)
+{
+	return SQL_CB(ws = std::weak_ptr<Session>(shared_from_this()), cb = std::move(callback)) {
+		auto session = ws.lock();
+		if (!session)
+			return;
+
+		cb(session, result);
+	};
 }
 
 #if defined(__SQL_ODBC)
@@ -179,7 +190,7 @@ void Session::_HandleSend(std::vector<std::shared_ptr<SendData>> raw_datas, cons
 			return;
 
 		//아직 보내지 못한 데이터가 더 있으니, 다시 재등록
-		GlobalHandler.threadManager->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
+		ThreadManager::GetInstnace()->EnqueueJob([this]() { _RegisterSend(); }, shared_from_this());
 	}
 }
 
@@ -257,8 +268,8 @@ int32 Session::_PacketCheck()
 
 		//수신 데이터 도착
 		//다음 수신 데이터 확인을 위해 처리 큐에 전달만 하고 계속 확인
-		recv_datas.push_back(J_MakeShared<RecvData>(_recvBuffer, _recvBuffer->ReadPos() + plen, header->size));
-		// = _serializeQueue->Push(J_MakeShared<ThreadJob>(
+		recv_datas.push_back(stdex::pmake_shared<RecvData>(_recvBuffer, _recvBuffer->ReadPos() + plen, header->size));
+		// = _serializeQueue->Push(stdex::pmake_shared<ThreadJob>(
 		// [this, copy]() {OnRecv(copy); },
 		// shared_from_this()));
 
@@ -276,7 +287,7 @@ int32 Session::_PacketCheck()
 
 void Session::_JobSerialize(std::function<void()>&& lambda)
 {
-	_serializeQueue->Push(J_MakeShared<ThreadJob>(std::move(lambda), shared_from_this()));
+	_serializeQueue->Push(stdex::pmake_shared<ThreadJob>(std::move(lambda), shared_from_this()));
 }
 
 void Session::_AttachSelfSession()
@@ -306,7 +317,7 @@ void ActiveSession::_HandleConnect(const boost::system::error_code& error)
 {
 	if (error)
 	{
-		//GlobalHandler.threadManager->EnqueueJob(J_MakeShared<ThreadJob>([this]() {
+		//ThreadManager::GetInstnace()->EnqueueJob(stdex::pmake_shared<ThreadJob>([this]() {
 		Start();
 			//}, shared_from_this()), _reconnection_interval);
 

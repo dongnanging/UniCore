@@ -21,9 +21,11 @@
 //TODO 기본 mutex나 csec이라고 하더라도 래핑클래스로 깔끔하게 관리하는게 좋아보인다.
 #if defined(__LOCK_MUTEX)	//기본 mutex
 #include <mutex>
-#define USE_MULT_LOCK(count) mutable std::recursive_mutex _locks[count]
-#define READ_LOCK_IDX(idx) std::lock_guard<std::recursive_mutex> read_lock_guard_##idx(_locks[idx])
-#define WRITE_LOCK_IDX(idx) std::lock_guard<std::recursive_mutex> write_lock_guard_##idx(_locks[idx])
+#define LOCK_TYPE std::recursive_mutex
+#define LOCK_LAII std::lock_guard<LOCK_TYPE>
+#define USE_MULT_LOCK(count) mutable LOCK_TYPE _locks[count]
+#define READ_LOCK_IDX(idx) LOCK_LAII read_lock_guard_##idx(_locks[idx])
+#define WRITE_LOCK_IDX(idx) LOCK_LAII write_lock_guard_##idx(_locks[idx])
 #define GET_LOCK_IDX(idx) _locks[idx]
 
 
@@ -42,7 +44,7 @@
 #define WRITE_LOCK WRITE_LOCK_IDX(0)
 #define GET_LOCK GET_LOCK_IDX(0)
 
-#define LOCK_WITH(lock_item, name) std::lock_guard<std::recursive_mutex> lock_instance_##name(lock_item);
+#define LOCK_WITH(lock_item, name) LOCK_LAII lock_instance_##name(lock_item);
 
 
 
@@ -64,7 +66,7 @@
 *	LOG
 ============================*/
 #ifdef _DEBUG
-#define file_log_dest stderr
+#define file_log_dest stdout
 #else
 #define file_log_dest
 #endif
@@ -80,12 +82,12 @@ struct variadic_format_string
 	{
 		try
 		{
-			std::fprintf(file_log_dest, stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+			std::fprintf(file_log_dest, stdex::sprintf_buffer(stdex::ctype_traits<_Format>::ctype(std::forward<_Format>(form_str)), stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...).c_str());
 			std::fprintf(file_log_dest, "\n");
 		}
 		catch (...)
 		{
-			
+			std::fprintf(file_log_dest, "failed write log.");
 		}
 	}
 
@@ -101,17 +103,17 @@ struct variadic_format_string
 			if constexpr (stdex::is_convertible_ctype_char_v<decltype(format_string)>)
 			{
 				auto wide_format_string = stdex::ctype_traits<std::wstring>::ctype(stdex::str_elem<std::wstring>::ascii(format_string));
-				std::fwprintf(file_log_dest, wide_format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+				std::fwprintf(file_log_dest, stdex::sprintf_buffer(wide_format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...).c_str());
 			}	
 			else
-				std::fwprintf(file_log_dest, format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...);
+				std::fwprintf(file_log_dest, stdex::sprintf_buffer(format_string, stdex::sprintf_traits<_Args>::safe_type(std::forward<_Args>(args))...).c_str());
 
 			
 			std::fwprintf(file_log_dest, L"\n");
 		}
 		catch (...)
 		{
-
+			std::fprintf(file_log_dest, "failed write log.");
 		}
 	}
 };
@@ -120,6 +122,9 @@ struct variadic_format_string
 #define OUT			//reference로 전달되어 결과가 저장될 예정인 파라미터에 사용
 #define PARAM_INPUT
 #define PARAM_OUTPUT
+
+// 경로 지정 시'\' 뒤에 오는 문자를 자동으로 escape sequence로 인식하려는 오류 무시
+#pragma warning( disable : 4129 ) 
 
 #ifdef _DEBUG
 #define DEBUG_CODE(cpp_std_cout) cpp_std_cout
@@ -141,32 +146,27 @@ FILE_LOG("FILE::%s\mLINE::%s, %d", __FILE__, __FUNCTION__, __LINE__)
 #define PORT_BOUNDARY 40000 //no use under this
 
 
-
 /*==========================
 *	Error Handle
 ============================*/
 #define CRASH(cause, ...) \
 { \
-ASSERT_LOG(cause, __VA_ARGS__); \
-uint32* crash = nullptr; __analysis_assume(crash != nullptr); *crash = 0xDEADBEEF; \
+	ASSERT_LOG(cause, __VA_ARGS__); \
+	std::exit(1);\
 }
+//uint32* crash = nullptr; __analysis_assume(crash != nullptr); *crash = 0xDEADBEEF; \
 
 #if defined(_DEBUG)		//디버깅 중엔 과감히 CRASH!!
-#define DYNAMIC_ASSERT(expr, msg, ...)	\
+#define DEBUG_ASSERT(expr, msg, ...) 	\
 {									\
 	if(!(expr))						\
 		CRASH(msg, __VA_ARGS__);\
 }
 #else	//File Log남기도록 유도하자 => traceback
-#define DYNAMIC_ASSERT(expr, msg)	\
-{									\
-	if(!(expr))						\
-		try							\
-		{							\
-			CRASH(msg);				\
-		}							\
-		catch (...)					\
-		{							\
-		}							\
-}								
+#define DEBUG_ASSERT(expr, msg)	FILE_LOG();\				
 #endif
+
+#define DYNAMIC_ASSERT(expr, msg, ...)	\
+{									\
+	DEBUG_ASSERT(expr, msg, __VA_ARGS__);\
+}

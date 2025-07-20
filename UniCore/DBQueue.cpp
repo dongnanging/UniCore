@@ -15,7 +15,7 @@ DBQueue::DBQueue(const bool& serialize, const std::shared_ptr<JobQueue>& callbac
 						return;
 
 					//완료되면 아무 로직 스레드나 해당 작업을 완료해줘
-					GlobalHandler.threadManager->EnqueueJob([callback]() {
+					ThreadManager::GetInstnace()->EnqueueJob([callback]() {
 						callback->Execute();
 						});
 				}, shared_from_this());
@@ -32,7 +32,7 @@ DBQueue::DBQueue(const bool& serialize, const std::shared_ptr<JobQueue>& callbac
 					return;
 
 				//완료되면 아무 로직 스레드나 해당 작업을 완료해줘
-				GlobalHandler.threadManager->EnqueueJob([callback]() {
+				ThreadManager::GetInstnace()->EnqueueJob([callback]() {
 					callback->Execute();
 					});
 				}, shared_from_this());
@@ -43,7 +43,7 @@ DBQueue::DBQueue(const bool& serialize, const std::shared_ptr<JobQueue>& callbac
 	_push = [this](const std::shared_ptr<SQL_Query_Sender>& sender, const std::shared_ptr<ThreadJob>& callback) 
 	{
 		int prev = _jobCount.fetch_add(1);
-		_concurrent_queue.enqueue(J_MakeShared<ThreadJob>([sender, callback, this]() {
+		_concurrent_queue.enqueue(stdex::pmake_shared<ThreadJob>([sender, callback, this]() {
 			sender->Send();
 			//to logic thread
 			if (callback)
@@ -60,7 +60,7 @@ DBQueue::DBQueue(const bool& serialize, const std::shared_ptr<JobQueue>& callbac
 	{
 		//sender가 여러개긴 해도 1개의 job으로 들어감
 		int prev = _jobCount.fetch_add(1);
-		_concurrent_queue.enqueue(J_MakeShared<ThreadJob>([senders, callback, this]() {
+		_concurrent_queue.enqueue(stdex::pmake_shared<ThreadJob>([senders, callback, this]() {
 			for(auto& sender : senders)
 				sender->Send();
 			//to logic thread
@@ -82,7 +82,7 @@ DBQueue::DBQueue(const bool& serialize, const std::shared_ptr<JobQueue>& callbac
 	}
 
 	//없으면 내부에서 새로 만들어서 사용
-	_callback_queue = J_MakeShared<JobQueue>();
+	_callback_queue = stdex::pmake_shared<JobQueue>();
 }
 
 void DBQueue::Push(const std::shared_ptr<SQL_Query_Sender>& sender, const std::shared_ptr<ThreadJob>& callback)

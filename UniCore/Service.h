@@ -200,11 +200,11 @@ public:
 		static_assert(_LevelCount > 0, "not support for zero level");
 
 		if (!service)
-			service = J_MakeShared< boost::asio::io_service>();
+			service = stdex::pmake_shared<boost::asio::io_service>();
 
 		for (int32 i = 0; i < _LevelCount; i++)
 		{
-			_serivces[i] = J_MakeShared<_ServiceType<i>>(sessionFactory, automake, service);
+			_serivces[i] = stdex::pmake_shared<_ServiceType<i>>(sessionFactory, automake, service);
 			_serivces[i]->set_level(i);
 
 			if (i < _LevelCount - 1)
@@ -219,11 +219,11 @@ public:
 		static_assert(_LevelCount > 0, "not support for zero level");
 
 		if (!service)
-			service = J_MakeShared< boost::asio::io_service>();
+			service = stdex::pmake_shared<boost::asio::io_service>();
 
 		for (int32 i = 0; i < _LevelCount; i++)
 		{
-			_serivces[i] = J_MakeShared<_ServiceType<i>>(port, acceptorcount, sessionFactory, service);
+			_serivces[i] = stdex::pmake_shared<_ServiceType<i>>(port, acceptorcount, sessionFactory, service);
 			_serivces[i]->set_level(i);
 
 			if (i < _LevelCount - 1)

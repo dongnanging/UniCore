@@ -92,7 +92,7 @@ void DBConnector::_ClearCursor(SQLHSTMT handle)
 
 std::shared_ptr<ConnectionData> DBConnector::_Connect()
 {
-    auto data = J_MakeShared<ConnectionData>();
+    auto data = stdex::pmake_shared<ConnectionData>();
 
     SQLRETURN   ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &data->sqlEnv);
     if (ret == SQL_ERROR)

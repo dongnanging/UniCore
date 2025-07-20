@@ -5,7 +5,7 @@ CoreGlobal GlobalHandler;
 
 CoreGlobal::CoreGlobal()
 {
-	deadLockProfiler = J_MakeShared<DeadLockProfiler>();
-	threadManager = J_MakeShared<ThreadManager>();
-	sendBufferSlicer = J_MakeShared<SendBufferSlicer>();
+	deadLockProfiler = stdex::pmake_shared<DeadLockProfiler>();
+	// threadManager = stdex::pmake_shared<ThreadManager>();
+	// sendBufferSlicer = stdex::pmake_shared<SendBufferSlicer>();
 }

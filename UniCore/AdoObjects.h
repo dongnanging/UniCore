@@ -54,7 +54,7 @@ private:
     COleDateTime _cdate;
 };
 
-class ado_parameter : objpool::NoPlacemnetNew
+class ado_parameter
 {
     friend ado_command;
     friend SQL_SENDER;
@@ -119,20 +119,29 @@ template <typename _Ty>
 concept _Shared_Ptr_Ado_Param = std::is_same_v<std::remove_reference_t<stdex::remove_all_const_t<_Ty>>, std::shared_ptr<ado_parameter>>;
 class ado_result
 {
+    friend SQL_SENDER;
 public:
     ado_result() : _ret(nullptr), _record(nullptr) {}
     ~ado_result()
     {
-        if (_record && _record->State == adStateOpen)
-            _record->Close();
+        try { _record->Close(); }
+        catch (...) { /* _record는 있었지만 유효하지 않은 상태 정보가 없는 상태*/ }
     }
 
     auto set_record(_RecordsetPtr record) { _record = std::forward<_RecordsetPtr>(record); return this; }
-    auto set_ret(std::shared_ptr<ado_parameter> ret) { _ret = ret; return this; }
 
-
-    const auto ret() { return _ret->value<int32>(); }
-    auto empty() { return !_record ||  _record->EndOfFile; }
+    const auto ret() { try { return _ret->value<int32>(); } catch (...) { return -1; } }
+    auto empty()
+    { 
+        try {
+            return !_record || _record->EndOfFile;
+        }
+        catch (...)
+        {
+            return true;
+        } 
+    }
+    const auto error_code() { return errorCode_; }
     bool next_record();
     bool move_first();
     bool move_next();
@@ -189,7 +198,11 @@ public:
         return sql_adodate(_record->Fields->Item[variant_t(static_cast<long>(row))]->Value.date);
     }
 
-
+    template<typename _Cast>
+    void get(_Cast& out, const int32& row)
+    {
+        out = get<_Cast>(row);
+    }
 
     template <typename _Cast>
     _Cast get(const char* raw_id)
@@ -242,6 +255,12 @@ public:
         return sql_adodate(_record->Fields->Item[variant_t(bstr_t(raw_id))]->Value.date);
     }
 
+    template<typename _Cast>
+    void get(_Cast& out, const char* raw_id)
+    {
+        out = get<_Cast>(raw_id);
+    }
+
     
     template <typename _Ado_Param_Shared>
         requires _Shared_Ptr_Ado_Param<_Ado_Param_Shared>
@@ -279,6 +298,8 @@ private:
     std::shared_ptr<ado_parameter> _ret;
     stdex::vector<std::shared_ptr<ado_parameter>> _inputs;
     stdex::vector<std::shared_ptr<ado_parameter>> _outputs;
+
+    int32 errorCode_ = 0;
 };
 
 class ado_conn_object : public std::enable_shared_from_this<ado_conn_object>
@@ -308,13 +329,25 @@ private:
 template<typename _Ty>
 concept _Shared_Ptr_Ado_Conn = std::is_same_v<std::remove_reference_t<stdex::remove_all_const_t<_Ty>>, std::shared_ptr<ado_conn_object>>;
 
-class SQL_SENDER : public std::enable_shared_from_this<SQL_SENDER>, objpool::NoPlacemnetNew
+class SQL_SENDER : public std::enable_shared_from_this<SQL_SENDER>
 {
 #define SQL_CALLBACK_PARAMS const std::shared_ptr<ado_result>& result
 #define SQL_CB(...) [__VA_ARGS__](SQL_CALLBACK_PARAMS)
+public:
     using sql_callback = std::function<void(SQL_CALLBACK_PARAMS)>;
 
+private:
     friend DBConnector;
+
+    _CommandPtr _comm;
+    sql_callback _callback = nullptr;
+
+    std::string _query;
+
+    std::shared_ptr<ado_conn_object> _active_conn;
+    std::shared_ptr<ado_result> _result;
+
+    bool _break;
 
 public:
     SQL_SENDER(_bstr_t query_string, CommandTypeEnum comm_type = CommandTypeEnum::adCmdStoredProc);
@@ -470,6 +503,9 @@ public:
     inline const auto& result() const noexcept { return _result; }
 
     inline bool isDone() const { 
+        if (_break)
+            return true;
+
         try 
         {
             return _comm->State != adStateExecuting;
@@ -485,13 +521,4 @@ public:
 //for friends
 private:
     inline void _clear();
-
-private:
-    _CommandPtr _comm;
-    sql_callback _callback = nullptr;
-
-    std::string _query;
-
-    std::shared_ptr<ado_conn_object> _active_conn;
-    std::shared_ptr<ado_result> _result;
 };

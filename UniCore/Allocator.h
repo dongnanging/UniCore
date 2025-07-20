@@ -33,20 +33,31 @@ struct BaseAllocator
 	bool operator!=(const BaseAllocator<_Uy>& other) noexcept { return false; } // 배교할 원소를 가지지 않음
 };
 
-template<typename _Ty>
+template<typename _Ty, typename = std::enable_if_t<!std::is_pointer_v<_Ty>>>
 struct PoolAllocator
 {
 	using value_type = _Ty;
 
 	value_type* allocate(std::size_t n)
 	{
-		return static_cast<value_type*>(MemoryPool::pop(n * sizeof(value_type)));
+		if constexpr (std::is_fundamental_v<value_type>)
+			return static_cast<value_type*>(::malloc(n));
+		else
+			return static_cast<value_type*>(MemoryPool::pop(n * sizeof(value_type)));
 	}
 
 	void deallocate(value_type* ptr, std::size_t n) noexcept
 	{
-		if (ptr)
-			MemoryPool::push(ptr, n * sizeof(value_type));
+		if constexpr (std::is_fundamental_v<value_type>)
+		{
+			if (ptr)
+				::free(ptr);
+		}
+		else 
+		{
+			if (ptr)
+				MemoryPool::push(ptr, n * sizeof(value_type));
+		}
 	}
 
 	//construct  생략

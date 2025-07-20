@@ -1,11 +1,14 @@
 #pragma once
+#if defined(__SQL_ODBC)
 #include "DBQueue.h"
-#include "PacketHeader.h"
+#endif
 
-using namespace boost::asio::ip;
+#include "PacketHeader.h"
 
 class Session;
 class Service;
+
+using namespace boost::asio::ip;
 
 class Session : public std::enable_shared_from_this<Session>
 {
@@ -15,6 +18,7 @@ class Session : public std::enable_shared_from_this<Session>
 
 protected:
 	Session();
+	virtual ~Session() {}
 
 public:
 	void AttachToService(std::shared_ptr<Service> from);
@@ -31,6 +35,29 @@ public:
 	//tcp -> udp로 변경될 가능성이 있으므로 socket은 연역하는것으로..
 	auto GetSocket() { return _socket; }
 	auto GetService() { return _ownedService.lock(); }
+
+	using session_db_callback = std::function<void(const std::shared_ptr<Session>& session, SQL_CALLBACK_PARAMS)>;
+
+#define SESSION_CB(...) [__VA_ARGS__](const std::shared_ptr<Session>& session, SQL_CALLBACK_PARAMS)
+#define UCAST_CB(UnwrapSession, ...) [__VA_ARGS__](UnwrapSession* session, SQL_CALLBACK_PARAMS)
+	SQL_SENDER::sql_callback shared_callback(session_db_callback&& callback);
+	template<typename _Lambda>
+	constexpr SQL_SENDER::sql_callback unwrap_callback(_Lambda&& callback)
+	{
+		using _CastSession = typename stdex::remove_all_pointer<stdex::pure_type_t<typename stdex::type_extract_t<0, typename stdex::function_traits<decltype(&_Lambda::operator())>::params_type >> >::type;
+
+		return SQL_CB(ws = std::weak_ptr<Session>(shared_from_this()), cb = std::move(callback)) {
+			auto session = ws.lock();
+			if (!session)
+				return;
+
+			auto cast_session = unwrap_cast<_CastSession>(session);
+			if (!cast_session)
+				return;
+
+			cb(cast_session, result);
+		};
+	}
 
 #if defined(__SQL_ODBC)
 	void SessionSideDBJob(const std::shared_ptr<SQL_Query_Sender>& sender, const std::shared_ptr<ThreadJob>& callback = nullptr);
@@ -80,7 +107,7 @@ protected:
 protected:
 	//send
 	LockContainer < std::shared_ptr<SendData>, std::queue<std::shared_ptr<SendData>>> _sendQueue;
-	std::atomic<int32> _queued_send_count;
+	std::atomic<std::size_t> _queued_send_count;
 
 	//recv
 	std::shared_ptr<RecvBuffer> _recvBuffer;

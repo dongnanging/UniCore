@@ -4,10 +4,10 @@
 #include "StringTools.h"
 
 template<typename _StrType>
-_StrType _StringOpener(const _StrType& source, int32& indexer)
+_StrType _StringOpener(const _StrType& source, std::size_t& indexer)
 {
 	_StrType result;
-	for (int32 i = indexer; i < source.size(); i++)
+	for (std::size_t i = indexer; i < source.size(); i++)
 	{
 		if (source[i] == stdex::str_elem<_StrType>::elem('\"'))
 		{
@@ -28,10 +28,10 @@ _StrType _StringOpener(const _StrType& source, int32& indexer)
 }
 
 template<typename _StrType>
-_StrType Rewind(const _StrType& source, const int32& indexer)
+_StrType Rewind(const _StrType& source, const std::size_t& indexer)
 {
 	_StrType result;
-	for (int32 i = indexer; i >= 0; i--)
+	for (std::size_t i = indexer; i >= 0; i--)
 	{
 		if (source[i] == stdex::str_elem<_StrType>::elem(':'))
 		{
@@ -49,11 +49,11 @@ _StrType Rewind(const _StrType& source, const int32& indexer)
 }
 
 template<typename _JsonItemType>
-std::vector<std::shared_ptr<_JsonItemType>> _SealedParser(const std::shared_ptr<_JsonItemType>& parent, const char opening, const typename _JsonItemType::string_type& source, int32& indexer)
+std::vector<std::shared_ptr<_JsonItemType>> _SealedParser(const std::shared_ptr<_JsonItemType>& parent, const char opening, const typename _JsonItemType::string_type& source, std::size_t& indexer)
 {
 	using converter = stdex::str_elem<typename _JsonItemType::string_type>;
 
-	std::shared_ptr<_JsonItemType> item = J_MakeShared<_JsonItemType>(parent);
+	std::shared_ptr<_JsonItemType> item = stdex::pmake_shared<_JsonItemType>(parent);
 	std::vector<std::shared_ptr<_JsonItemType>> result;
 	result.push_back(item);
 
@@ -71,7 +71,7 @@ std::vector<std::shared_ptr<_JsonItemType>> _SealedParser(const std::shared_ptr<
 		break;
 	}
 
-	for (int32 i = indexer; i < std::size(source); i++)
+	for (std::size_t i = indexer; i < std::size(source); i++)
 	{
 		// 닫김 (최상위 일 경우, 굳이 key, value값을 요구하지 않음)
 		if (source[i] == close && close != converter::elem(' '))
@@ -154,7 +154,7 @@ std::vector<std::shared_ptr<_JsonItemType>> _SealedParser(const std::shared_ptr<
 				item->set_value(value);
 			}
 
-			item = J_MakeShared<_JsonItemType>(parent);
+			item = stdex::pmake_shared<_JsonItemType>(parent);
 			result.push_back(item);
 			continue;
 
@@ -262,10 +262,10 @@ std::shared_ptr<_JsonItemType> SealedParser(const _StrType& source_file, const i
 		json_string += line_buffer + stdex::str_elem<typename _JsonItemType::string_type>::elem('\n');
 	}
 
-	auto head = J_MakeShared<_JsonItemType>(nullptr);
+	auto head = stdex::pmake_shared<_JsonItemType>(nullptr);
 	//head->set_type(JOType::HEADER);
 
-	int32 index = 0;
+	typename decltype(json_string)::size_type index = 0;
 	auto result = _SealedParser(head, stdex::str_elem<typename _JsonItemType::string_type>::elem(' '), json_string, index);
 	if (result.size() == 1)
 	{

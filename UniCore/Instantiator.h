@@ -1,32 +1,33 @@
 #pragma once
 
 
-template<typename _Type, typename... Args>
-_Type* mutable_new(Args&&... args)
-{
-	//메모리만 할당(생성자 호출 x)
-	_Type* memory = static_cast<_Type*>(custom_malloc(sizeof(_Type)));
+//template<typename _Type, typename... Args>
+//_Type* mutable_new(Args&&... args)
+//{
+//	//메모리만 할당(생성자 호출 x)
+//	_Type* memory = static_cast<_Type*>(custom_malloc(sizeof(_Type)));
+//
+//	//정식 명칭은 placement new 라고 한다.
+//	new(memory)_Type(std::forward<Args>(args)...);
+//
+//	return memory;
+//}
+//
+//template<typename _Type>
+//void mutable_delete(_Type* memory)
+//{
+//	memory->~_Type();
+//
+//	custom_free(memory);
+//}
 
-	//정식 명칭은 placement new 라고 한다.
-	new(memory)_Type(std::forward<Args>(args)...);
-
-	return memory;
-}
-
-template<typename _Type>
-void mutable_delete(_Type* memory)
-{
-	memory->~_Type();
-
-	custom_free(memory);
-}
-
-template<typename _Type, typename... _Args>
-inline static std::shared_ptr<_Type> J_MakeShared(_Args&&... args)
-{
-	//return std::shared_ptr<_Type>({ mutable_new<_Type>(std::forward<_Args>(args)...), mutable_delete<_Type>});
-	//return std::make_shared<_Type>(std::forward<_Args>(args)...);
-	return ObjectPool<_Type>::PoolShared(std::forward< _Args>(args)...);
+namespace stdex {
+	template<typename _Type, typename... _Args>
+	std::enable_if_t<std::is_constructible_v<_Type, _Args...>
+	, std::shared_ptr<_Type>> pmake_shared(_Args&&... args)
+	{
+		return ObjectPool<_Type>::PoolShared(std::forward<_Args>(args)...);
+	}
 }
 
 template<typename _Type, typename... _Args>

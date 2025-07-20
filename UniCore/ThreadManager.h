@@ -1,6 +1,9 @@
 #pragma once
 #include "JobQueue.h"
 
+#include <iterator>
+#include <algorithm>
+
 struct SJItem
 {
 	enum Enum_JobType
@@ -59,19 +62,43 @@ struct sj_compare
 	}
 };
 
+#include "Actor.h"
+struct ThreadMessage {
+	std::queue<std::shared_ptr<ThreadJob>> jobs;
+	std::queue<std::shared_ptr<SJItem>> sjobs;
+};
+
+class ActorThread : public Actor<std::shared_ptr<ThreadMessage>> {
+	void _Handle(std::shared_ptr<ThreadMessage>& msg) override {
+		while (!msg->jobs.empty())
+		{
+			msg->jobs.front()->Execute();
+			msg->jobs.pop();
+		}
+
+		while (!msg->sjobs.empty())
+		{
+			msg->sjobs.front()->Toss();
+			msg->sjobs.pop();
+		}
+	}
+};
+
 using thread_func = std::function<void()>;
-class ThreadManager
+class ThreadManager : public stdex::sigleton<ThreadManager>
 {
+	enum LockEnum : std::size_t {
+		JOBQUEUE,
+		WAITQUEUE,
+		NAX,
+	};
+	USE_MULT_LOCK(NAX);
+
 public:
 	//ThreadManager();
 	//ThreadManager(int16 thread_count);
-	ThreadManager() = default;
+	ThreadManager();
 	~ThreadManager() noexcept;
-
-	ThreadManager(const ThreadManager& other) = delete;
-	ThreadManager(ThreadManager&& right) = delete;
-	ThreadManager& operator=(const ThreadManager& other) = delete;
-	ThreadManager& operator=(ThreadManager&& right) = delete;
 
 public:
 	/// <summary>
@@ -79,7 +106,8 @@ public:
 	/// </summary>
 	//void AddWorker();
 	void AddWorker(int16 threadCount);
-	int16 GetThreadCount() { return _threads.size(); }
+	void AddAnchor(thread_func&& func);
+	const auto GetThreadCount() { return _threads.size(); }
 
 	void AddInitFunc(thread_func&& func)
 	{
@@ -94,10 +122,14 @@ public:
 	}
 
 private:
-	inline void _MakeThreadPool(const int16& count);
-	inline void _ThreadWork();
-	inline void _init();
-	inline void _exit();
+	void _MakeThreadPool(const int16& count);
+	void _ThreadWork();
+	void _Schedule();
+	void _init();
+	void _exit();
+
+public:
+	void StartSchedule();
 
 public:
 	void EnqueueJob(std::function<void()>&& lambda, uint64 tickAfter = 0);
@@ -109,22 +141,46 @@ public:
 	template<typename _Validator>
 	void EnqueueJob(std::function<void()>&& lambda, std::shared_ptr<_Validator>& execValidator, uint64 tickAfter = 0)
 	{
-		EnqueueJob(J_MakeShared<ThreadJob>(std::move(lambda), std::move(execValidator)), tickAfter);
+		EnqueueJob(stdex::pmake_shared<ThreadJob>(std::move(lambda), std::move(execValidator)), tickAfter);
 	}
 	template<typename _Validator>
 	void EnqueueJob(std::function<void()>&& lambda, std::shared_ptr<_Validator>&& execValidator, uint64 tickAfter = 0)
 	{
-		EnqueueJob(J_MakeShared<ThreadJob>(std::move(lambda), std::move(execValidator)), tickAfter);
+		EnqueueJob(stdex::pmake_shared<ThreadJob>(std::move(lambda), std::move(execValidator)), tickAfter);
+	}
+
+	template<typename _Class, typename _Ret, typename... _Args>
+	void EnqueueJob(uint64 tickAfter, _Class* owner, _Ret(_Class::* memFunc)(_Args...), _Args... args)
+	{
+		EnqueueJob(stdex::pmake_shared<ThreadJob>([=]() {
+			(owner->*memFunc)(args...);
+			}), tickAfter);
+	}
+
+
+	template<typename _Class, typename _Ret, typename... _Args>
+	void EnqueueJob(_Class* owner, _Ret(_Class::* memFunc)(_Args...), _Args... args)
+	{
+		WRITE_LOCK_IDX(JOBQUEUE);
+		_job_queue.push(stdex::pmake_shared<ThreadJob>([=]() {
+			(owner->*memFunc)(args...);
+		}));
 	}
 
 private:
+
 	bool _running = false;
 	std::vector<std::thread> _threads;
+	std::vector<std::thread> _anchored;
+
+	std::thread _scheduler;
+	std::vector<std::shared_ptr<ActorThread>> _athreads;
 
 	std::vector< thread_func> _init_funcs;
 	std::vector< thread_func> _exit_funcs;
 
 private:
-	USE_LOCK;
+	std::queue<std::shared_ptr<ThreadJob>> _job_queue;
 	std::priority_queue<std::shared_ptr<SJItem>, std::vector<std::shared_ptr<SJItem>>, sj_compare> _wait_queue;
 };
+

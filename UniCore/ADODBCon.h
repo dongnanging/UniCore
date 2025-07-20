@@ -8,8 +8,6 @@ public:
     DBConnector(const std::string& provider, const std::string& source, const std::string& dbname, const std::string& id, const std::string& pw, const uint16& port = 0, const bool& async = true);
     virtual ~DBConnector();
 
-
-
 public:
     std::shared_ptr<ado_conn_object> pop();
     void push(std::shared_ptr<ado_conn_object> con);
@@ -66,7 +64,7 @@ private:
         typename = std::enable_if_t<std::is_same_v<stdex::pure_type_t<_Shared_Proc_Sender>, proc_sender>, _Shared_Proc_Sender>>
     void _Awaiting(_Shared_Proc_Sender&& proc)
     {
-        GlobalHandler.threadManager->EnqueueJob(J_MakeShared<ThreadJob>([proc = std::forward<_Shared_Proc_Sender>(proc), this]() mutable {
+        ThreadManager::GetInstnace()->EnqueueJob(stdex::pmake_shared<ThreadJob>([proc = std::forward<_Shared_Proc_Sender>(proc), this]() mutable {
             if (proc->isDone())
             {
                 proc->on_callback();

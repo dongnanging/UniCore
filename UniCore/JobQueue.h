@@ -11,6 +11,6 @@ private:
 	void _Execute();
 
 private:
-	std::atomic<int32> _jobCount;
+	std::atomic<std::size_t> _jobCount;
 	LockContainer<std::shared_ptr<ThreadJob>, std::queue<std::shared_ptr<ThreadJob>>> _concurrent_queue;
 };

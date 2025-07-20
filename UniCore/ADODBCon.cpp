@@ -37,7 +37,7 @@ std::shared_ptr<ado_conn_object> DBConnector::pop()
     {
         try 
         {
-            result = J_MakeShared<ado_conn_object>(shared_from_this(), static_cast<_bstr_t>(_connection_string.c_str()));
+            result = stdex::pmake_shared<ado_conn_object>(shared_from_this(), static_cast<_bstr_t>(_connection_string.c_str()));
         }
         catch(_com_error& e)
         {
